@@ -3236,6 +3236,7 @@ dependencies = [
  "samplerate",
  "serde",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "toml",
  "whisper-rs",

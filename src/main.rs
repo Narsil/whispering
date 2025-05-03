@@ -31,24 +31,13 @@
 #![deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
-use clap::Parser;
-use log::info;
 
 mod app;
 mod audio;
 mod config;
 mod keyboard;
-mod whisper;
 mod logging;
-
-/// A voice-to-text application using Whisper.
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Run in test mode (record once and exit)
-    #[arg(short, long)]
-    test: bool,
-}
+mod whisper;
 
 /// Main entry point for the Whispering application.
 ///
@@ -59,17 +48,9 @@ async fn main() -> Result<()> {
     // Initialize logging
     logging::init_logging();
 
-    // Parse command line arguments
-    let args = Args::parse();
-
     // Create and run the application
     let mut app = app::App::new().await?;
-    if args.test {
-        let text = app.record_and_transcribe()?;
-        info!("Transcribed text: {}", text);
-    } else {
-        app.run().await?;
-    }
+    app.run().await?;
 
     Ok(())
 }

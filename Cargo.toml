@@ -17,6 +17,7 @@ rdev = { git = "https://github.com/Narsil/rdev", features =["wayland"], rev = "2
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 samplerate = "0.2.4"
 serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
 toml = "0.8"
 tokio = { version = "1.44.2", features = ["full"] }
 whisper-rs = { git = "https://github.com/Narsil/whisper-rs.git", features = ["cuda"], rev = "171471d2b3615f54a1f6c87d70ee88f54b1126a9" }

@@ -19,7 +19,13 @@ repo = "ggerganov/whisper.cpp"
 # Model filename
 filename = "ggml-base.en.bin"
 
+[paths]
 # Cache directory for storing temporary files
 cache_dir = "~/.cache/whispering"
 # Path to the recorded audio file
-recording_path = "~/.cache/whispering/recorded.wav" 
+recording_path = "~/.cache/whispering/recorded.wav"
+
+[shortcuts]
+# Keys that need to be pressed in sequence to start recording
+# Available keys: control, alt, shift, super, space, enter, r, and many others
+keys = ["control", "space"] 

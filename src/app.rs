@@ -4,16 +4,13 @@
 //! event handling, and coordination between different components of the application.
 
 use anyhow::{Context, Result, anyhow};
-use hound::WavReader;
 use log::{error, info};
 use notify_rust::Notification;
 use rdev::{EventType, Key, listen, simulate};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
-use whisper_rs::{
-    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, install_logging_hooks,
-};
+use whisper_rs::install_logging_hooks;
 
 use crate::audio::AudioRecorder;
 use crate::config::Config;
@@ -22,11 +19,11 @@ use crate::whisper::{download_model, run_whisper};
 
 /// Represents the current state of the application.
 ///
-/// This struct tracks whether the control key is pressed and whether
+/// This struct tracks whether the modifier key is pressed and whether
 /// audio recording is currently in progress.
 #[derive(Debug, PartialEq)]
 struct State {
-    ctrl: bool,
+    pressed_keys: Vec<Key>,
     recording: bool,
 }
 
@@ -39,7 +36,7 @@ pub struct App {
     state: State,
     recorder: AudioRecorder,
     model_path: PathBuf,
-    context: WhisperContext,
+    config: Config,
 }
 
 impl App {
@@ -62,33 +59,27 @@ impl App {
         let recorder = AudioRecorder::new(&config)?;
 
         // Create cache directory if it doesn't exist
-        std::fs::create_dir_all(&config.cache_dir)?;
+        std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Download model if it doesn't exist
         let model_path = download_model(&config).await?;
 
         install_logging_hooks();
-        // Load Whisper model
-        let context = WhisperContext::new_with_params(
-            &model_path.to_string_lossy(),
-            WhisperContextParameters::default(),
-        )?;
-
         Ok(Self {
             state: State {
-                ctrl: false,
+                pressed_keys: Vec::new(),
                 recording: false,
             },
             recorder,
             model_path,
-            context,
+            config,
         })
     }
 
     /// Runs the main application loop.
     ///
     /// This function sets up the keyboard event listener and processes
-    /// events until the application is terminated. It handles the Ctrl+Space
+    /// events until the application is terminated. It handles the configured
     /// shortcut for starting/stopping recording.
     pub async fn run(&mut self) -> Result<()> {
         let (schan, mut rchan) = unbounded_channel();
@@ -104,7 +95,10 @@ impl App {
             Ok(())
         });
 
-        info!("Ready to record. Press Ctrl+Space to start recording, release Space to stop.");
+        info!(
+            "Press {:?} to start recording, release the last key to stop",
+            self.config.shortcuts.keys
+        );
 
         while let Some(event) = rchan.recv().await {
             self.handle_event(event)?;
@@ -120,18 +114,24 @@ impl App {
     /// when recording stops.
     fn handle_event(&mut self, event: rdev::Event) -> Result<()> {
         match event.event_type {
-            EventType::KeyPress(Key::ControlLeft) | EventType::KeyPress(Key::ControlRight) => {
-                self.state.ctrl = true;
-            }
-            EventType::KeyRelease(Key::ControlLeft) | EventType::KeyRelease(Key::ControlRight) => {
-                self.state.ctrl = false;
-            }
-            EventType::KeyPress(Key::Space) => {
-                if self.state.ctrl {
+            EventType::KeyPress(key) => {
+                if !self.state.pressed_keys.contains(&key) {
+                    self.state.pressed_keys.push(key);
+                }
+
+                // Check if all required keys are pressed
+                let all_keys_pressed = self
+                    .config
+                    .shortcuts
+                    .keys
+                    .iter()
+                    .all(|required_key| self.state.pressed_keys.contains(required_key));
+
+                if all_keys_pressed && !self.state.recording {
                     self.state.recording = true;
                     info!("Starting recording...");
                     self.recorder.start_recording()?;
-                    
+
                     // Show desktop notification
                     Notification::new()
                         .summary("Whispering")
@@ -140,21 +140,24 @@ impl App {
                         .show()?;
                 }
             }
-            EventType::KeyRelease(Key::Space) => {
-                if self.state.recording {
+            EventType::KeyRelease(key) => {
+                self.state.pressed_keys.retain(|&k| k != key);
+
+                // If we were recording and any required key is released, stop recording
+                if self.state.recording && self.config.shortcuts.keys.contains(&key) {
                     self.state.recording = false;
                     info!("Stopping recording...");
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
                     let output = run_whisper(&self.model_path, &wav_path)?;
-                    
+
                     // Show notification with transcribed text
                     Notification::new()
                         .summary("Whispering - Transcription Complete")
                         .body(&output)
                         .icon("audio-input-microphone")
                         .show()?;
-                        
+
                     paste(output)?;
                     // Always end by pressing Return to submit
                     std::thread::sleep(Duration::from_millis(200));
@@ -165,56 +168,5 @@ impl App {
             _ => (),
         }
         Ok(())
-    }
-
-    /// Records audio and transcribes it.
-    ///
-    /// This function:
-    /// 1. Records audio from the default input device
-    /// 2. Saves it to a WAV file
-    /// 3. Transcribes the audio using Whisper
-    /// 4. Returns the transcription text
-    pub fn record_and_transcribe(&self) -> Result<String> {
-        // Start recording
-        self.recorder.start_recording()?;
-
-        // Wait for user input to stop recording
-        println!("Press Enter to stop recording...");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        // Stop recording and get the path to the recorded file
-        let recording_path = self.recorder.stop_recording()?;
-
-        // Read WAV file
-        let mut reader = WavReader::open(&recording_path)?;
-        let samples: Vec<f32> = if reader.spec().sample_format == hound::SampleFormat::Float {
-            reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
-        } else {
-            reader
-                .samples::<i16>()
-                .map(|s| s.unwrap_or(0) as f32 / 32768.0)
-                .collect()
-        };
-
-        // Transcribe the audio
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_print_special(false);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_timestamps(false);
-
-        let mut state = self.context.create_state()?;
-        state.full(params, &samples)?;
-
-        let num_segments = state.full_n_segments()?;
-        let mut text = String::new();
-        for i in 0..num_segments {
-            let segment = state.full_get_segment_text(i)?;
-            text.push_str(&segment);
-            text.push(' ');
-        }
-
-        Ok(text.trim().to_string())
     }
 }

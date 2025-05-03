@@ -77,9 +77,11 @@ impl AudioRecorder {
             warn!("Desired format not explicitly supported, stream may not work");
         }
 
-        std::fs::create_dir_all(&config.cache_dir)?;
+        // Create cache directory if it doesn't exist
+        std::fs::create_dir_all(&config.paths.cache_dir)?;
 
-        let writer = WavWriter::create(&config.recording_path, Self::create_wav_spec(&config.audio))?;
+        // Create WAV writer
+        let writer = WavWriter::create(&config.paths.recording_path, Self::create_wav_spec(&config.audio))?;
         let writer = Arc::new(Mutex::new(Some(writer)));
         let writer2 = writer.clone();
 
@@ -97,7 +99,7 @@ impl AudioRecorder {
         Ok(Self {
             writer,
             stream,
-            recording_path: config.recording_path.clone(),
+            recording_path: config.paths.recording_path.clone(),
             config: config.audio.clone(),
         })
     }
