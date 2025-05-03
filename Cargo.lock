@@ -1585,15 +1585,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libsamplerate-sys"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28853b399f78f8281cd88d333b54a63170c4275f6faea66726a2bea5cca72e0d"
-dependencies = [
- "cmake",
-]
-
-[[package]]
 name = "libudev-sys"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2452,15 +2443,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "samplerate"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e032b2b24715c4f982f483ea3abdb3c9ba444d9f63e87b2843d6f998f5ba2698"
-dependencies = [
- "libsamplerate-sys",
-]
-
-[[package]]
 name = "schannel"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3233,7 +3215,6 @@ dependencies = [
  "notify-rust",
  "rdev",
  "reqwest",
- "samplerate",
  "serde",
  "tempfile",
  "thiserror 1.0.69",
