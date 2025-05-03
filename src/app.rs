@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, anyhow};
 use hound::WavReader;
 use log::{error, info};
+use notify_rust::Notification;
 use rdev::{EventType, Key, listen, simulate};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -130,6 +131,13 @@ impl App {
                     self.state.recording = true;
                     info!("Starting recording...");
                     self.recorder.start_recording()?;
+                    
+                    // Show desktop notification
+                    Notification::new()
+                        .summary("Whispering")
+                        .body("Recording started")
+                        .icon("audio-input-microphone")
+                        .show()?;
                 }
             }
             EventType::KeyRelease(Key::Space) => {
@@ -139,6 +147,14 @@ impl App {
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
                     let output = run_whisper(&self.model_path, &wav_path)?;
+                    
+                    // Show notification with transcribed text
+                    Notification::new()
+                        .summary("Whispering - Transcription Complete")
+                        .body(&output)
+                        .icon("audio-input-microphone")
+                        .show()?;
+                        
                     paste(output)?;
                     // Always end by pressing Return to submit
                     std::thread::sleep(Duration::from_millis(200));

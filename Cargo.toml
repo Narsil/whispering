@@ -12,6 +12,7 @@ env_logger = "0.11.8"
 hf-hub = { version = "0.4.2", features = ["tokio"] }
 hound = "3.5.1"
 log = "0.4.27"
+notify-rust = "4.10.0"
 rdev = { git = "https://github.com/Narsil/rdev", features =["wayland"], rev = "2b6ca5bc87be7cbcee7960179d426c80b1eecf26" }
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 samplerate = "0.2.4"
