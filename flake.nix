@@ -41,14 +41,18 @@
             pname = cargoMeta.name;
             version = cargoMeta.version;
             src = ./.;
-            cargoLock.lockFile = ./Cargo.lock;
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+              outputHashes = {
+                "rdev-0.5.3" = "sha256-Ynj4hhi2GNj5NLzCoOJywe6uEvxhhzHfkhqc72FqHy4=";
+                "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
+
+              };
+            };
             nativeBuildInputs = with pkgs; [
               pkg-config
               llvmPackages.libclang
               cmake
-              cudaPackages.cudatoolkit
-              cudaPackages.cuda_cudart
-              cudaPackages.cuda_nvcc
             ];
             buildInputs = with pkgs; [
               udev
@@ -56,8 +60,28 @@
               alsa-lib
               alsa-utils
               openssl
+              cudaPackages.cudatoolkit
+              cudaPackages.cuda_cudart
+              cudaPackages.cuda_nvcc
             ];
-            # LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib";
+            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+            BINDGEN_EXTRA_CLANG_ARGS = ''-I"${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"'';
+            CUDA_PATH = "${pkgs.cudaPackages.cudatoolkit}";
+            CMAKE_CUDA_COMPILER = "${pkgs.cudaPackages.cuda_nvcc}/bin/nvcc";
+            CMAKE_PREFIX_PATH =
+              with pkgs;
+              lib.makeSearchPath "lib/cmake" [
+                cudaPackages.cudatoolkit
+                cudaPackages.cuda_cudart
+              ];
+            LD_LIBRARY_PATH =
+              with pkgs;
+              lib.makeLibraryPath [
+                cudaPackages.cudatoolkit
+                cudaPackages.cuda_cudart
+                cudaPackages.libcublas
+                llvmPackages.libclang.lib
+              ];
           };
         }
       );
@@ -88,9 +112,9 @@
               # whisper.rs
               llvmPackages.libclang
               cmake
-              cudaPackages_12_4.cudatoolkit
-              cudaPackages_12_4.cuda_cudart
-              cudaPackages_12_4.cuda_nvcc
+              cudaPackages.cudatoolkit
+              cudaPackages.cuda_cudart
+              cudaPackages.cuda_nvcc
             ];
             LD_LIBRARY_PATH = "${llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib";
             RUST_LOG = "whispering=info";
