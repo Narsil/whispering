@@ -27,6 +27,16 @@ pub struct AudioRecorder {
 }
 
 impl AudioRecorder {
+    /// Creates a new WAV specification for recording.
+    fn create_wav_spec() -> WavSpec {
+        WavSpec {
+            channels: 1,
+            sample_rate: 16000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        }
+    }
+
     /// Creates a new AudioRecorder instance.
     ///
     /// This function initializes the default audio input device, configures it
@@ -58,13 +68,6 @@ impl AudioRecorder {
             warn!("Desired format not explicitly supported, stream may not work");
         }
 
-        let spec = WavSpec {
-            channels: 1,
-            sample_rate: 16000,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
-        };
-
         let mut cache_dir: PathBuf =
             dirs::cache_dir().ok_or_else(|| anyhow!("Cannot find cache directory"))?;
         cache_dir.push("whispering");
@@ -72,7 +75,7 @@ impl AudioRecorder {
         let mut path = cache_dir.clone();
         path.push("recorded.wav");
 
-        let writer = WavWriter::create(&path, spec)?;
+        let writer = WavWriter::create(&path, Self::create_wav_spec())?;
         let writer = Arc::new(Mutex::new(Some(writer)));
         let writer2 = writer.clone();
 
@@ -99,6 +102,8 @@ impl AudioRecorder {
     /// This function begins capturing audio from the input device and writing
     /// it to the WAV file.
     pub fn start_recording(&self) -> Result<()> {
+        let writer = WavWriter::create(&self.recording_path, Self::create_wav_spec())?;
+        *self.writer.lock().map_err(|e| anyhow!("Failed to lock writer: {}", e))? = Some(writer);
         self.stream.play()?;
         Ok(())
     }

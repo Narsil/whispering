@@ -84,8 +84,11 @@ impl App {
         info!("Ready to record. Press Ctrl+Space to start recording, release Space to stop.");
 
         while let Some(event) = rchan.recv().await {
-            self.handle_event(event)?;
+            if let Err(err) = self.handle_event(event.clone()) {
+                error!("Could not handle event {event:?}: {err}");
+            }
         }
+        info!("Done exiting");
         Ok(())
     }
 
