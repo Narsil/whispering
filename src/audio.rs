@@ -14,6 +14,8 @@ use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use crate::config::{AudioConfig, Config};
+
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>;
 
 /// Handles audio recording functionality.
@@ -24,24 +26,28 @@ pub struct AudioRecorder {
     writer: WavWriterHandle,
     stream: cpal::Stream,
     recording_path: PathBuf,
+    config: AudioConfig,
 }
 
 impl AudioRecorder {
     /// Creates a new WAV specification for recording.
-    fn create_wav_spec() -> WavSpec {
+    fn create_wav_spec(config: &AudioConfig) -> WavSpec {
         WavSpec {
-            channels: 1,
-            sample_rate: 16000,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
+            channels: config.channels,
+            sample_rate: config.sample_rate,
+            bits_per_sample: config.bits_per_sample,
+            sample_format: match config.sample_format {
+                crate::config::SampleFormat::Float => hound::SampleFormat::Float,
+                crate::config::SampleFormat::Int => hound::SampleFormat::Int,
+            },
         }
     }
 
     /// Creates a new AudioRecorder instance.
     ///
     /// This function initializes the default audio input device, configures it
-    /// for 16kHz mono recording, and sets up the WAV file writer.
-    pub fn new() -> Result<Self> {
+    /// for recording, and sets up the WAV file writer.
+    pub fn new(config: &Config) -> Result<Self> {
         let host = cpal::default_host();
         let device = host
             .default_input_device()
@@ -49,33 +55,31 @@ impl AudioRecorder {
 
         info!("Using input device: {}", device.name()?);
 
-        let config = StreamConfig {
-            channels: 1,                           // mono
-            sample_rate: cpal::SampleRate(16_000), // 16kHz
+        let stream_config = StreamConfig {
+            channels: config.audio.channels,
+            sample_rate: cpal::SampleRate(config.audio.sample_rate),
             buffer_size: cpal::BufferSize::Default,
         };
 
         // Check for supported formats
         let mut supported_configs = device.supported_input_configs()?;
         let has_desired_format = supported_configs.any(|f| {
-            f.min_sample_rate().0 <= 16_000
-                && f.max_sample_rate().0 >= 16_000
-                && f.channels() == 1
-                && f.sample_format() == cpal::SampleFormat::F32
+            f.min_sample_rate().0 <= config.audio.sample_rate
+                && f.max_sample_rate().0 >= config.audio.sample_rate
+                && f.channels() == config.audio.channels
+                && f.sample_format() == match config.audio.sample_format {
+                    crate::config::SampleFormat::Float => cpal::SampleFormat::F32,
+                    crate::config::SampleFormat::Int => cpal::SampleFormat::I16,
+                }
         });
 
         if !has_desired_format {
             warn!("Desired format not explicitly supported, stream may not work");
         }
 
-        let mut cache_dir: PathBuf =
-            dirs::cache_dir().ok_or_else(|| anyhow!("Cannot find cache directory"))?;
-        cache_dir.push("whispering");
-        std::fs::create_dir_all(&cache_dir)?;
-        let mut path = cache_dir.clone();
-        path.push("recorded.wav");
+        std::fs::create_dir_all(&config.cache_dir)?;
 
-        let writer = WavWriter::create(&path, Self::create_wav_spec())?;
+        let writer = WavWriter::create(&config.recording_path, Self::create_wav_spec(&config.audio))?;
         let writer = Arc::new(Mutex::new(Some(writer)));
         let writer2 = writer.clone();
 
@@ -84,7 +88,7 @@ impl AudioRecorder {
         };
 
         let stream = device.build_input_stream(
-            &config,
+            &stream_config,
             move |data, _: &_| Self::write_input_data::<f32, f32>(data, &writer2),
             err_fn,
             None,
@@ -93,7 +97,8 @@ impl AudioRecorder {
         Ok(Self {
             writer,
             stream,
-            recording_path: path,
+            recording_path: config.recording_path.clone(),
+            config: config.audio.clone(),
         })
     }
 
@@ -102,7 +107,7 @@ impl AudioRecorder {
     /// This function begins capturing audio from the input device and writing
     /// it to the WAV file.
     pub fn start_recording(&self) -> Result<()> {
-        let writer = WavWriter::create(&self.recording_path, Self::create_wav_spec())?;
+        let writer = WavWriter::create(&self.recording_path, Self::create_wav_spec(&self.config))?;
         *self.writer.lock().map_err(|e| anyhow!("Failed to lock writer: {}", e))? = Some(writer);
         self.stream.play()?;
         Ok(())

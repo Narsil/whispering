@@ -3,14 +3,19 @@
 //! This module contains the core application logic, including state management,
 //! event handling, and coordination between different components of the application.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
+use hound::WavReader;
 use log::{error, info};
 use rdev::{EventType, Key, listen, simulate};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, install_logging_hooks,
+};
 
 use crate::audio::AudioRecorder;
+use crate::config::Config;
 use crate::keyboard::paste;
 use crate::whisper::{download_model, run_whisper};
 
@@ -33,24 +38,40 @@ pub struct App {
     state: State,
     recorder: AudioRecorder,
     model_path: PathBuf,
+    context: WhisperContext,
 }
 
 impl App {
     /// Creates a new App instance.
     ///
     /// This function initializes the application by:
-    /// 1. Downloading the Whisper model
-    /// 2. Warming up the keyboard lock
-    /// 3. Initializing the audio recorder
+    /// 1. Loading configuration from config.toml or using defaults
+    /// 2. Setting up the audio recorder
+    /// 3. Loading the Whisper model
     pub async fn new() -> Result<Self> {
-        info!("Starting whispering...");
+        // Load configuration
+        let mut config_file = dirs::config_dir()
+            .context("Cannot find config directory")
+            .unwrap_or_else(|_| PathBuf::from("~/.config"));
+        config_file.push("whispering");
+        config_file.push("config.toml");
+        let config = Config::load()?;
 
-        let model_path = download_model().await?;
-        // Just warmup the lock
-        simulate(&EventType::KeyPress(Key::ControlLeft))?;
-        simulate(&EventType::KeyRelease(Key::ControlLeft))?;
+        // Initialize audio recorder
+        let recorder = AudioRecorder::new(&config)?;
 
-        let recorder = AudioRecorder::new()?;
+        // Create cache directory if it doesn't exist
+        std::fs::create_dir_all(&config.cache_dir)?;
+
+        // Download model if it doesn't exist
+        let model_path = download_model(&config).await?;
+
+        install_logging_hooks();
+        // Load Whisper model
+        let context = WhisperContext::new_with_params(
+            &model_path.to_string_lossy(),
+            WhisperContextParameters::default(),
+        )?;
 
         Ok(Self {
             state: State {
@@ -59,6 +80,7 @@ impl App {
             },
             recorder,
             model_path,
+            context,
         })
     }
 
@@ -84,9 +106,7 @@ impl App {
         info!("Ready to record. Press Ctrl+Space to start recording, release Space to stop.");
 
         while let Some(event) = rchan.recv().await {
-            if let Err(err) = self.handle_event(event.clone()) {
-                error!("Could not handle event {event:?}: {err}");
-            }
+            self.handle_event(event)?;
         }
         info!("Done exiting");
         Ok(())
@@ -129,5 +149,56 @@ impl App {
             _ => (),
         }
         Ok(())
+    }
+
+    /// Records audio and transcribes it.
+    ///
+    /// This function:
+    /// 1. Records audio from the default input device
+    /// 2. Saves it to a WAV file
+    /// 3. Transcribes the audio using Whisper
+    /// 4. Returns the transcription text
+    pub fn record_and_transcribe(&self) -> Result<String> {
+        // Start recording
+        self.recorder.start_recording()?;
+
+        // Wait for user input to stop recording
+        println!("Press Enter to stop recording...");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        // Stop recording and get the path to the recorded file
+        let recording_path = self.recorder.stop_recording()?;
+
+        // Read WAV file
+        let mut reader = WavReader::open(&recording_path)?;
+        let samples: Vec<f32> = if reader.spec().sample_format == hound::SampleFormat::Float {
+            reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
+        } else {
+            reader
+                .samples::<i16>()
+                .map(|s| s.unwrap_or(0) as f32 / 32768.0)
+                .collect()
+        };
+
+        // Transcribe the audio
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        params.set_print_special(false);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_timestamps(false);
+
+        let mut state = self.context.create_state()?;
+        state.full(params, &samples)?;
+
+        let num_segments = state.full_n_segments()?;
+        let mut text = String::new();
+        for i in 0..num_segments {
+            let segment = state.full_get_segment_text(i)?;
+            text.push_str(&segment);
+            text.push(' ');
+        }
+
+        Ok(text.trim().to_string())
     }
 }

@@ -3,73 +3,59 @@
 //! This module provides functionality for downloading and running the Whisper model
 //! for speech-to-text transcription. It handles model management and audio processing.
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use hf_hub::api::tokio::ApiBuilder;
+use hound::{SampleFormat, WavReader};
 use std::path::{Path, PathBuf};
-use whisper_rs::{
-    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, install_logging_hooks,
-};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+use crate::config::Config;
 
 /// Downloads the Whisper model from Hugging Face Hub.
 ///
-/// This function fetches the "ggml-base.en.bin" model from the "ggerganov/whisper.cpp"
-/// repository. The model is cached locally after the first download.
-pub async fn download_model() -> Result<PathBuf> {
+/// This function fetches the model from the specified repository and filename.
+pub async fn download_model(config: &Config) -> Result<PathBuf> {
     let api = ApiBuilder::from_env().build()?;
-    let repo = api.model("ggerganov/whisper.cpp".to_string());
-    let filename = repo.get("ggml-base.en.bin").await?;
+    let repo = api.model(config.model.repo.clone());
+    let filename = repo.get(&config.model.filename).await?;
     Ok(filename)
 }
 
-/// Runs the Whisper model on an audio file.
+/// Runs the Whisper model on the given audio file.
 ///
-/// This function takes a WAV file, processes it through the Whisper model,
-/// and returns the transcribed text.
+/// This function takes a path to a WAV file and returns the transcribed text.
 pub fn run_whisper(model_path: &Path, wav_path: &Path) -> Result<String> {
-    install_logging_hooks();
-
-    // load a context and model
-    let ctx = WhisperContext::new_with_params(
-        &model_path.display().to_string(),
+    let context = WhisperContext::new_with_params(
+        &model_path.to_string_lossy(),
         WhisperContextParameters::default(),
-    )
-    .map_err(|e| anyhow!("Failed to load model: {}", e))?;
+    )?;
+    let mut state = context.create_state()?;
 
-    // create a params object
-    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 5 });
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     params.set_print_special(false);
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
 
-    // Load and process the WAV file
-    let reader =
-        hound::WavReader::open(wav_path).map_err(|e| anyhow!("Failed to open WAV file: {}", e))?;
-    let samples: Vec<f32> = reader
-        .into_samples::<f32>()
-        .filter_map(Result::ok)
-        .collect();
+    let mut reader = WavReader::open(wav_path)?;
+    let samples: Vec<f32> = if reader.spec().sample_format == SampleFormat::Float {
+        reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
+    } else {
+        reader
+            .samples::<i16>()
+            .map(|s| s.unwrap_or(0) as f32 / 32768.0)
+            .collect()
+    };
 
-    // Create state and run the model
-    let mut state = ctx
-        .create_state()
-        .map_err(|e| anyhow!("Failed to create state: {}", e))?;
+    state.full(params, &samples)?;
 
-    state
-        .full(params, &samples[..])
-        .map_err(|e| anyhow!("Failed to run model: {}", e))?;
-
-    // Fetch results
-    let num_segments = state
-        .full_n_segments()
-        .map_err(|e| anyhow!("Failed to get number of segments: {}", e))?;
-
-    let mut output = String::new();
+    let num_segments = state.full_n_segments()?;
+    let mut text = String::new();
     for i in 0..num_segments {
-        let segment = state
-            .full_get_segment_text(i)
-            .map_err(|e| anyhow!("Failed to get segment {}: {}", i, e))?;
-        output.push_str(&segment);
+        let segment = state.full_get_segment_text(i)?;
+        text.push_str(&segment);
+        text.push(' ');
     }
-    Ok(output)
+
+    Ok(text.trim().to_string())
 }

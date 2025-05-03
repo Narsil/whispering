@@ -1,0 +1,25 @@
+# Whispering Configuration Example
+#
+# Copy this file to ~/.config/whispering/config.toml and modify the values as needed.
+# If no config.toml is found, the application will use default values.
+
+[audio]
+# Number of audio channels (1 for mono, 2 for stereo)
+channels = 1
+# Sample rate in Hz
+sample_rate = 16000
+# Bits per sample
+bits_per_sample = 32
+# Sample format (float or int)
+sample_format = "float"
+
+[model]
+# Hugging Face model repository
+repo = "ggerganov/whisper.cpp"
+# Model filename
+filename = "ggml-base.en.bin"
+
+# Cache directory for storing temporary files
+cache_dir = "~/.cache/whispering"
+# Path to the recorded audio file
+recording_path = "~/.cache/whispering/recorded.wav" 

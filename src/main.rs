@@ -3,41 +3,51 @@
 //!
 //! The application is structured into several modules:
 //! - `audio`: Handles audio input/output and recording functionality
+//! - `config`: Manages application configuration
 //! - `keyboard`: Manages keyboard shortcuts and user input
 //! - `whisper`: Provides speech recognition using the Whisper model
 //! - `app`: Contains the main application logic and state management
 //!
-//! # Environment Variables
-//! - `RUST_LOG`: Controls log level (defaults to "info" if not set)
-//!   - Example: `RUST_LOG=debug cargo run` for more detailed logging
-//!   - Available levels: error, warn, info, debug, trace
+//! # Configuration
+//! The application can be configured through a TOML file named `config.toml` in the current directory:
+//!
+//! ```toml
+//! [audio]
+//! channels = 1
+//! sample_rate = 16000
+//! bits_per_sample = 32
+//! sample_format = "float"
+//!
+//! [model]
+//! repo = "ggerganov/whisper.cpp"
+//! filename = "ggml-base.en.bin"
+//!
+//! cache_dir = "/path/to/cache"
+//! recording_path = "/path/to/recording.wav"
+//! ```
+//!
+//! If no configuration file is found, default values will be used.
 #![deny(missing_docs)]
 #![deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
-use env_logger::{self, Builder, Env};
-use log::LevelFilter;
-use std::sync::Once;
+use clap::Parser;
+use log::info;
 
 mod app;
 mod audio;
+mod config;
 mod keyboard;
 mod whisper;
+mod logging;
 
-static INIT: Once = Once::new();
-
-/// Initialize the logger with the given filter.
-///
-/// This is a test helper function that allows us to control the log level
-/// in our tests without affecting the global logger state.
-fn init_test_logger() {
-    INIT.call_once(|| {
-        Builder::from_env(Env::default().default_filter_or("info"))
-            .filter_module("whispering", LevelFilter::Info)
-            .filter_module("whisper", LevelFilter::Info)
-            .filter_level(LevelFilter::Off)
-            .init();
-    });
+/// A voice-to-text application using Whisper.
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Run in test mode (record once and exit)
+    #[arg(short, long)]
+    test: bool,
 }
 
 /// Main entry point for the Whispering application.
@@ -46,7 +56,20 @@ fn init_test_logger() {
 /// sets up the application, and runs the main event loop.
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_test_logger();
+    // Initialize logging
+    logging::init_logging();
+
+    // Parse command line arguments
+    let args = Args::parse();
+
+    // Create and run the application
     let mut app = app::App::new().await?;
-    app.run().await
+    if args.test {
+        let text = app.record_and_transcribe()?;
+        info!("Transcribed text: {}", text);
+    } else {
+        app.run().await?;
+    }
+
+    Ok(())
 }
