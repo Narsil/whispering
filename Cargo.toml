@@ -13,10 +13,10 @@ hf-hub = { version = "0.4.2", features = ["tokio"] }
 hound = "3.5.1"
 log = "0.4.27"
 notify-rust = "4.10.0"
-rdev = { git = "https://github.com/Narsil/rdev", features =["wayland"], rev = "2b6ca5bc87be7cbcee7960179d426c80b1eecf26" }
+rdev = { git = "https://github.com/Narsil/rdev", rev = "12fbd458e10fcf937e456bda647ffd4751026f59" }
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
-thiserror = "1.0"
+thiserror = "2"
 toml = "0.8"
 tokio = { version = "1.44.2", features = ["full"] }
 whisper-rs = { git = "https://github.com/Narsil/whisper-rs.git", rev = "171471d2b3615f54a1f6c87d70ee88f54b1126a9" }

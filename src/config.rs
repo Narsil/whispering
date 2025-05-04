@@ -6,7 +6,10 @@
 use anyhow::{Context, Result};
 use rdev::Key;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 /// Audio recording configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,7 +80,7 @@ pub struct ModelConfig {
 #[derive(Debug, Clone)]
 pub struct ShortcutConfig {
     /// Keys that need to be pressed in sequence
-    pub keys: Vec<Key>,
+    pub keys: HashSet<Key>,
 }
 
 impl Serialize for ShortcutConfig {
@@ -119,6 +122,14 @@ impl<'de> Deserialize<'de> for ShortcutConfig {
             })
             .collect::<Result<Vec<Key>, _>>()?;
 
+        let hash_keys: HashSet<Key> = keys.iter().cloned().collect();
+        if hash_keys.len() != keys.len() {
+            return Err(serde::de::Error::custom(format!(
+                "Duplicate keys in {keys:?}"
+            )));
+        }
+        let keys = hash_keys;
+
         Ok(ShortcutConfig { keys })
     }
 }
@@ -126,7 +137,7 @@ impl<'de> Deserialize<'de> for ShortcutConfig {
 impl Default for ShortcutConfig {
     fn default() -> Self {
         Self {
-            keys: vec![Key::ControlLeft, Key::Space],
+            keys: HashSet::from([Key::ControlLeft, Key::Space]),
         }
     }
 }
