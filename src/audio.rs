@@ -9,6 +9,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, StreamConfig};
 use hound::{WavSpec, WavWriter};
 use log::{error, info, warn};
+use rubato::{FftFixedInOut, Resampler};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
@@ -27,6 +28,43 @@ pub struct AudioRecorder {
     stream: cpal::Stream,
     recording_path: PathBuf,
     config: AudioConfig,
+}
+
+pub fn audio_resample(
+    data: &[f32],
+    sample_rate0: u32,
+    sample_rate: u32,
+    channels: u16,
+) -> Vec<f32> {
+    use samplerate::{ConverterType, convert};
+    convert(
+        sample_rate0 as _,
+        sample_rate as _,
+        channels as _,
+        ConverterType::SincBestQuality,
+        data,
+    )
+    .unwrap_or_default()
+}
+
+pub fn stereo_to_mono(stereo_data: &[f32]) -> Vec<f32> {
+    // Ensure the input data length is even (it should be if it's valid stereo data)
+    assert_eq!(
+        stereo_data.len() % 2,
+        0,
+        "Stereo data length should be even."
+    );
+
+    let mut mono_data = Vec::with_capacity(stereo_data.len() / 2);
+
+    // Iterate over stereo data in steps of 2 (one stereo sample pair at a time)
+    for chunk in stereo_data.chunks_exact(2) {
+        // Calculate the average of the two channels
+        let average = (chunk[0] + chunk[1]) / 2.0;
+        mono_data.push(average);
+    }
+
+    mono_data
 }
 
 impl AudioRecorder {
@@ -67,10 +105,11 @@ impl AudioRecorder {
             f.min_sample_rate().0 <= config.audio.sample_rate
                 && f.max_sample_rate().0 >= config.audio.sample_rate
                 && f.channels() == config.audio.channels
-                && f.sample_format() == match config.audio.sample_format {
-                    crate::config::SampleFormat::Float => cpal::SampleFormat::F32,
-                    crate::config::SampleFormat::Int => cpal::SampleFormat::I16,
-                }
+                && f.sample_format()
+                    == match config.audio.sample_format {
+                        crate::config::SampleFormat::Float => cpal::SampleFormat::F32,
+                        crate::config::SampleFormat::Int => cpal::SampleFormat::I16,
+                    }
         });
 
         if !has_desired_format {
@@ -81,20 +120,38 @@ impl AudioRecorder {
         std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Create WAV writer
-        let writer = WavWriter::create(&config.paths.recording_path, Self::create_wav_spec(&config.audio))?;
+        let writer = WavWriter::create(
+            &config.paths.recording_path,
+            Self::create_wav_spec(&config.audio),
+        )?;
         let writer = Arc::new(Mutex::new(Some(writer)));
         let writer2 = writer.clone();
-
         let err_fn = move |err| {
             error!("Audio stream error: {}", err);
         };
 
-        let stream = device.build_input_stream(
+        let stream = if let Ok(stream) = device.build_input_stream(
             &stream_config,
             move |data, _: &_| Self::write_input_data::<f32, f32>(data, &writer2),
             err_fn,
             None,
-        )?;
+        ) {
+            stream
+        } else {
+            let default_config = device.default_input_config()?;
+            let sample_rate_in = default_config.sample_rate().0;
+            let sample_rate_out = stream_config.sample_rate.0;
+            let writer3 = writer.clone();
+            let sconfig: StreamConfig = default_config.into();
+            log::info!("In {sample_rate_in}: Out {sample_rate_out} config {sconfig:?}");
+            device.build_input_stream(
+                &sconfig,
+                move |data, _: &_| Self::write_input_data_sample::<f32, f32>(data, &writer3, &None),
+                err_fn,
+                None,
+            )?
+        };
+        stream.pause()?;
 
         Ok(Self {
             writer,
@@ -110,7 +167,10 @@ impl AudioRecorder {
     /// it to the WAV file.
     pub fn start_recording(&self) -> Result<()> {
         let writer = WavWriter::create(&self.recording_path, Self::create_wav_spec(&self.config))?;
-        *self.writer.lock().map_err(|e| anyhow!("Failed to lock writer: {}", e))? = Some(writer);
+        *self
+            .writer
+            .lock()
+            .map_err(|e| anyhow!("Failed to lock writer: {}", e))? = Some(writer);
         self.stream.play()?;
         Ok(())
     }
@@ -131,22 +191,50 @@ impl AudioRecorder {
         Ok(self.recording_path.clone())
     }
 
+    fn write_input_data_sample<T, U>(
+        input: &[T],
+        writer: &WavWriterHandle,
+        resampler: &Option<Arc<Mutex<FftFixedInOut<T>>>>,
+    ) where
+        T: Sample + rubato::Sample,
+        U: Sample + hound::Sample + FromSample<T>,
+        FftFixedInOut<T>: Resampler<T>,
+    {
+        // Convert the input samples to f32
+        let samples: Vec<f32> = input
+            .iter()
+            .map(|s| s.to_float_sample().to_sample())
+            .collect();
+
+        // Resample the stereo audio to the desired sample rate
+        // let resampled_stereo: Vec<f32> = audio_resample(&samples, sample_rate, 16000, channels);
+        let resampled_stereo: Vec<f32> = audio_resample(&samples, 44100, 16000, 2);
+
+        // // Convert the resampled stereo audio to mono
+        // let mut mono_samples = Vec::new();
+        // for chunk in resampled_stereo.chunks(2) {
+        //     let mono_sample = (chunk[0] + chunk[1]) / 2.0; // Average left and right channels
+        //     mono_samples.push(mono_sample);
+        // }
+        if let Ok(mut guard) = writer.try_lock() {
+            if let Some(writer) = guard.as_mut() {
+                for &sample in resampled_stereo.iter() {
+                    // let sample: U = U::from_sample(sample);
+                    writer.write_sample(sample).ok();
+                }
+            }
+        }
+    }
+
     /// Writes audio data to the WAV file.
     ///
     /// This function is called by the audio stream callback to write the captured
     /// audio data to the WAV file.
     fn write_input_data<T, U>(input: &[T], writer: &WavWriterHandle)
     where
-        T: Sample,
+        T: Sample + rubato::Sample,
         U: Sample + hound::Sample + FromSample<T>,
     {
-        if let Ok(mut guard) = writer.try_lock() {
-            if let Some(writer) = guard.as_mut() {
-                for &sample in input.iter() {
-                    let sample: U = U::from_sample(sample);
-                    writer.write_sample(sample).ok();
-                }
-            }
-        }
+        Self::write_input_data_sample::<T, U>(input, writer, &None)
     }
 }
