@@ -130,8 +130,8 @@
         in
         with pkgs;
         {
-          default =
-            pkgs.mkShell.override { stdenv = clangStdenv; } {
+          default = pkgs.mkShell.override { stdenv = clangStdenv; } (
+            {
               nativeBuildInputs = [
                 pkg-config
               ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
@@ -142,7 +142,8 @@
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
-            // getEnvVars pkgs system;
+            // (getEnvVars pkgs system)
+          );
         }
       );
     };

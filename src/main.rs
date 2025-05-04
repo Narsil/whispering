@@ -33,11 +33,11 @@
 use anyhow::Result;
 
 mod app;
+mod asr;
 mod audio;
 mod config;
 mod keyboard;
 mod logging;
-mod whisper;
 
 /// Main entry point for the Whispering application.
 ///

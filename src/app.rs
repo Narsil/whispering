@@ -13,10 +13,10 @@ use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 use whisper_rs::install_logging_hooks;
 
+use crate::asr::{Asr, download_model};
 use crate::audio::AudioRecorder;
 use crate::config::Config;
 use crate::keyboard::paste;
-use crate::whisper::{download_model, run_whisper};
 
 /// Represents the current state of the application.
 ///
@@ -36,7 +36,7 @@ struct State {
 pub struct App {
     state: State,
     recorder: AudioRecorder,
-    model_path: PathBuf,
+    asr: Asr,
     config: Config,
 }
 
@@ -66,13 +66,14 @@ impl App {
         let model_path = download_model(&config).await?;
 
         install_logging_hooks();
+        let asr = Asr::new(&model_path)?;
         Ok(Self {
             state: State {
                 pressed_keys: HashSet::new(),
                 recording: false,
             },
             recorder,
-            model_path,
+            asr,
             config,
         })
     }
@@ -102,7 +103,9 @@ impl App {
         );
 
         while let Some(event) = rchan.recv().await {
-            self.handle_event(event)?;
+            if let Err(err) = self.handle_event(event) {
+                error!("error handling event: {err}");
+            }
         }
         info!("Done exiting");
         Ok(())
@@ -144,7 +147,9 @@ impl App {
                     info!("Stopping recording...");
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
-                    let output = run_whisper(&self.model_path, &wav_path)?;
+                    let output = self.asr.run(&wav_path)?;
+                    // let output = "Toto".to_string();
+                    info!("Transcribed: {output}");
                     let summary = if output.len() > 20 {
                         &format!("{}..", &output[..20])
                     } else {

@@ -13,7 +13,7 @@ hf-hub = { version = "0.4.2", features = ["tokio"] }
 hound = "3.5.1"
 log = "0.4.27"
 notify-rust = "4.10.0"
-rdev = { git = "https://github.com/Narsil/rdev", rev = "12fbd458e10fcf937e456bda647ffd4751026f59" }
+rdev = { git = "https://github.com/Narsil/rdev", rev = "1934f946d04b4426110211241a1447c8c41c0887" }
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
@@ -29,6 +29,8 @@ arboard = "3.5.0"
 jack = ["cpal/jack"]
 cuda = ["whisper-rs/cuda"]
 metal = ["whisper-rs/metal"]
+wayland = ["rdev/wayland"]
+x11 = ["rdev/x11"]
 
 [dev-dependencies]
 tempfile = "3.8"
