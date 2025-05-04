@@ -137,19 +137,27 @@ pub fn key_from_char(byte: u8) -> Option<(Key, bool)> {
 /// appropriate key press and release events. It handles both regular
 /// characters and special characters that require the shift key.
 pub fn paste(output: String) -> Result<()> {
-    info!("Simulating keyboard input: {}", output);
-    for c in output.bytes() {
-        if let Some((key, shift)) = key_from_char(c) {
-            if shift {
-                simulate(&EventType::KeyPress(Key::ShiftLeft))?;
-            }
-            simulate(&EventType::KeyPress(key))?;
-            simulate(&EventType::KeyRelease(key))?;
-            if shift {
-                simulate(&EventType::KeyRelease(Key::ShiftLeft))?;
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-    }
+    let mut clipboard = arboard::Clipboard::new().unwrap();
+    clipboard.set_text(output)?;
+    simulate(&EventType::KeyPress(Key::ShiftLeft))?;
+    simulate(&EventType::KeyPress(Key::ControlLeft))?;
+    simulate(&EventType::KeyPress(Key::KeyV))?;
+    simulate(&EventType::KeyRelease(Key::KeyV))?;
+    simulate(&EventType::KeyRelease(Key::ControlLeft))?;
+    simulate(&EventType::KeyRelease(Key::ShiftLeft))?;
+    // info!("Simulating keyboard input: {}", output);
+    // for c in output.bytes() {
+    //     if let Some((key, shift)) = key_from_char(c) {
+    //         if shift {
+    //             simulate(&EventType::KeyPress(Key::ShiftLeft))?;
+    //         }
+    //         simulate(&EventType::KeyPress(key))?;
+    //         simulate(&EventType::KeyRelease(key))?;
+    //         if shift {
+    //             simulate(&EventType::KeyRelease(Key::ShiftLeft))?;
+    //         }
+    //         std::thread::sleep(Duration::from_millis(1));
+    //     }
+    // }
     Ok(())
 }

@@ -22,6 +22,7 @@ tokio = { version = "1.44.2", features = ["full"] }
 whisper-rs = { git = "https://github.com/Narsil/whisper-rs.git", rev = "171471d2b3615f54a1f6c87d70ee88f54b1126a9" }
 samplerate = "0.2.4"
 rubato = "0.16.2"
+arboard = "3.5.0"
 
 
 [features]
