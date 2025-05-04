@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, StreamConfig};
 use hound::{WavSpec, WavWriter};
-use log::{error, info, warn};
+use log::{error, info};
 use rubato::{FftFixedInOut, Resampler};
 use std::fs::File;
 use std::io::BufWriter;
