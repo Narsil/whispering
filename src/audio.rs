@@ -19,6 +19,13 @@ use crate::config::{AudioConfig, Config};
 
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>;
 
+#[derive(Clone, Copy)]
+struct Resample {
+    samplerate_in: u32,
+    samplerate_out: u32,
+    in_channels: u16,
+}
+
 /// Handles audio recording functionality.
 ///
 /// This struct manages the audio recording process, including device initialization,
@@ -45,26 +52,6 @@ pub fn audio_resample(
         data,
     )
     .unwrap_or_default()
-}
-
-pub fn stereo_to_mono(stereo_data: &[f32]) -> Vec<f32> {
-    // Ensure the input data length is even (it should be if it's valid stereo data)
-    assert_eq!(
-        stereo_data.len() % 2,
-        0,
-        "Stereo data length should be even."
-    );
-
-    let mut mono_data = Vec::with_capacity(stereo_data.len() / 2);
-
-    // Iterate over stereo data in steps of 2 (one stereo sample pair at a time)
-    for chunk in stereo_data.chunks_exact(2) {
-        // Calculate the average of the two channels
-        let average = (chunk[0] + chunk[1]) / 2.0;
-        mono_data.push(average);
-    }
-
-    mono_data
 }
 
 impl AudioRecorder {
@@ -113,7 +100,7 @@ impl AudioRecorder {
         });
 
         if !has_desired_format {
-            warn!("Desired format not explicitly supported, stream may not work");
+            info!("Desired format not explicitly supported, falling back to resampling");
         }
 
         // Create cache directory if it doesn't exist
@@ -139,14 +126,21 @@ impl AudioRecorder {
             stream
         } else {
             let default_config = device.default_input_config()?;
-            let sample_rate_in = default_config.sample_rate().0;
-            let sample_rate_out = stream_config.sample_rate.0;
+            let samplerate_in = default_config.sample_rate().0;
+            let samplerate_out = stream_config.sample_rate.0;
             let writer3 = writer.clone();
+            let in_channels = default_config.channels();
             let sconfig: StreamConfig = default_config.into();
-            log::info!("In {sample_rate_in}: Out {sample_rate_out} config {sconfig:?}");
+            let resample = Resample {
+                samplerate_in,
+                samplerate_out,
+                in_channels,
+            };
             device.build_input_stream(
                 &sconfig,
-                move |data, _: &_| Self::write_input_data_sample::<f32, f32>(data, &writer3, &None),
+                move |data, _: &_| {
+                    Self::write_input_data_sample::<f32, f32>(data, &writer3, Some(resample))
+                },
                 err_fn,
                 None,
             )?
@@ -194,33 +188,57 @@ impl AudioRecorder {
     fn write_input_data_sample<T, U>(
         input: &[T],
         writer: &WavWriterHandle,
-        resampler: &Option<Arc<Mutex<FftFixedInOut<T>>>>,
+        resampler: Option<Resample>,
     ) where
         T: Sample + rubato::Sample,
         U: Sample + hound::Sample + FromSample<T>,
         FftFixedInOut<T>: Resampler<T>,
     {
-        // Convert the input samples to f32
-        let samples: Vec<f32> = input
-            .iter()
-            .map(|s| s.to_float_sample().to_sample())
-            .collect();
+        if let Some(resampler) = resampler {
+            // Convert the input samples to f32
+            let samples: Vec<f32> = input
+                .iter()
+                .map(|s| s.to_float_sample().to_sample())
+                .collect();
 
-        // Resample the stereo audio to the desired sample rate
-        // let resampled_stereo: Vec<f32> = audio_resample(&samples, sample_rate, 16000, channels);
-        let resampled_stereo: Vec<f32> = audio_resample(&samples, 44100, 16000, 2);
+            // Resample the stereo audio to the desired sample rate
+            // let resampled_stereo: Vec<f32> = audio_resample(&samples, sample_rate, 16000, channels);
+            let resampled_stereo: Vec<f32> = audio_resample(
+                &samples,
+                resampler.samplerate_in,
+                resampler.samplerate_out,
+                resampler.in_channels,
+            );
 
-        // // Convert the resampled stereo audio to mono
-        // let mut mono_samples = Vec::new();
-        // for chunk in resampled_stereo.chunks(2) {
-        //     let mono_sample = (chunk[0] + chunk[1]) / 2.0; // Average left and right channels
-        //     mono_samples.push(mono_sample);
-        // }
-        if let Ok(mut guard) = writer.try_lock() {
-            if let Some(writer) = guard.as_mut() {
-                for &sample in resampled_stereo.iter() {
-                    // let sample: U = U::from_sample(sample);
-                    writer.write_sample(sample).ok();
+            let samples = if resampler.in_channels != 1 {
+                let n = resampler.in_channels as usize;
+                // Convert the resampled stereo audio to mono
+                let mono_samples: Vec<_> = resampled_stereo
+                    .chunks(n)
+                    .map(|chunk| {
+                        let mono_sample = (chunk.iter().sum::<f32>()) / n as f32; // Average channels
+                        mono_sample
+                    })
+                    .collect();
+                mono_samples
+            } else {
+                resampled_stereo
+            };
+            if let Ok(mut guard) = writer.try_lock() {
+                if let Some(writer) = guard.as_mut() {
+                    for &sample in samples.iter() {
+                        // let sample: U = U::from_sample(sample);
+                        writer.write_sample(sample).ok();
+                    }
+                }
+            }
+        } else {
+            if let Ok(mut guard) = writer.try_lock() {
+                if let Some(writer) = guard.as_mut() {
+                    for &sample in input.iter() {
+                        let sample: U = U::from_sample(sample);
+                        writer.write_sample(sample).ok();
+                    }
                 }
             }
         }
@@ -235,6 +253,6 @@ impl AudioRecorder {
         T: Sample + rubato::Sample,
         U: Sample + hound::Sample + FromSample<T>,
     {
-        Self::write_input_data_sample::<T, U>(input, writer, &None)
+        Self::write_input_data_sample::<T, U>(input, writer, None)
     }
 }
