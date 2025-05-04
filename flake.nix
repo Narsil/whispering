@@ -25,9 +25,11 @@
         };
 
       # Function to get system-specific build inputs
-      getBuildInputs = pkgs: system:
+      getBuildInputs =
+        pkgs: system:
         if pkgs.stdenv.isDarwin then
-          with pkgs; [
+          with pkgs;
+          [
             darwin.apple_sdk.frameworks.CoreAudio
             darwin.apple_sdk.frameworks.AudioToolbox
             darwin.apple_sdk.frameworks.Metal
@@ -40,7 +42,8 @@
             openssl
           ]
         else
-          with pkgs; [
+          with pkgs;
+          [
             udev
             libinput
             alsa-lib
@@ -52,7 +55,8 @@
           ];
 
       # Function to get system-specific environment variables
-      getEnvVars = pkgs: system:
+      getEnvVars =
+        pkgs: system:
         if pkgs.stdenv.isDarwin then
           {
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -66,28 +70,12 @@
           }
         else
           {
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            BINDGEN_EXTRA_CLANG_ARGS = ''-I"${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"'';
-            CUDA_PATH = "${pkgs.cudaPackages.cudatoolkit}";
-            CMAKE_CUDA_COMPILER = "${pkgs.cudaPackages.cuda_nvcc}/bin/nvcc";
-            CMAKE_PREFIX_PATH = with pkgs; lib.makeSearchPath "lib/cmake" [
-              cudaPackages.cudatoolkit
-              cudaPackages.cuda_cudart
-            ];
-            LD_LIBRARY_PATH = with pkgs; lib.makeLibraryPath [
-              cudaPackages.cudatoolkit
-              cudaPackages.cuda_cudart
-              cudaPackages.libcublas
-              llvmPackages.libclang.lib
-            ];
+            LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib";
           };
 
       # Function to get system-specific cargo features
-      getCargoFeatures = pkgs: system:
-        if pkgs.stdenv.isDarwin then
-          "--features metal"
-        else
-          "--features cuda";
+      getCargoFeatures =
+        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features cuda";
     in
     {
       packages = forAllSystems (
@@ -96,32 +84,37 @@
           overlays = [ (import rust-overlay) ];
           pkgs = import nixpkgs {
             inherit system overlays;
-            config.allowUnfree = true;
+            config.allowUnfree = !pkgs.stdenv.isDarwin;
             config.cudaSupport = !pkgs.stdenv.isDarwin;
           };
           # Parse Cargo.toml
           cargoMeta = parseCargoToml pkgs ./Cargo.toml;
         in
         {
-          default = pkgs.rustPlatform.buildRustPackage {
-            pname = cargoMeta.name;
-            version = cargoMeta.version;
-            src = ./.;
-            cargoLock = {
-              lockFile = ./Cargo.lock;
-              outputHashes = {
-                "rdev-0.5.3" = "sha256-Ynj4hhi2GNj5NLzCoOJywe6uEvxhhzHfkhqc72FqHy4=";
-                "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
+          default =
+            pkgs.rustPlatform.buildRustPackage {
+              pname = cargoMeta.name;
+              version = cargoMeta.version;
+              src = ./.;
+              cargoLock = {
+                lockFile = ./Cargo.lock;
+                outputHashes = {
+                  "rdev-0.5.3" = "sha256-Ynj4hhi2GNj5NLzCoOJywe6uEvxhhzHfkhqc72FqHy4=";
+                  "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
+                };
               };
-            };
-            cargoBuildFlags = getCargoFeatures pkgs system;
-            nativeBuildInputs = with pkgs; [
-              pkg-config
-              llvmPackages.libclang
-              cmake
-            ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else []);
-            buildInputs = getBuildInputs pkgs system;
-          } // getEnvVars pkgs system;
+              cargoBuildFlags = getCargoFeatures pkgs system;
+              nativeBuildInputs =
+                with pkgs;
+                [
+                  pkg-config
+                  llvmPackages.libclang
+                  cmake
+                ]
+                ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
+              buildInputs = getBuildInputs pkgs system;
+            }
+            // getEnvVars pkgs system;
         }
       );
 
@@ -131,24 +124,25 @@
           overlays = [ (import rust-overlay) ];
           pkgs = import nixpkgs {
             inherit system overlays;
-            config.allowUnfree = true;
+            config.allowUnfree = !pkgs.stdenv.isDarwin;
             config.cudaSupport = !pkgs.stdenv.isDarwin;
           };
         in
         with pkgs;
         {
-          default = pkgs.mkShell.override { stdenv = clangStdenv; } {
-            nativeBuildInputs = [
-              pkg-config
-            ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else []);
-            buildInputs = [
-              rustup
-              llvmPackages.libclang
-              cmake
-            ] ++ getBuildInputs pkgs system;
-            RUST_LOG = "whispering=info";
-            CARGO_BUILD_FLAGS = getCargoFeatures pkgs system;
-          } // getEnvVars pkgs system;
+          default =
+            pkgs.mkShell.override { stdenv = clangStdenv; } {
+              nativeBuildInputs = [
+                pkg-config
+              ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
+              buildInputs = [
+                rustup
+                llvmPackages.libclang
+                cmake
+              ] ++ getBuildInputs pkgs system;
+              RUST_LOG = "whispering=info";
+            }
+            // getEnvVars pkgs system;
         }
       );
     };
