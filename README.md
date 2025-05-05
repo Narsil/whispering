@@ -12,6 +12,27 @@ A desktop application that allows you to record audio and transcribe it using Op
 
 ## Installation
 
+### Manual Installation
+
+1. Install Rust and Cargo from [rustup.rs](https://rustup.rs/)
+2. (Optional) Install the required system dependencies:
+   - ALSA development libraries (for audio recording)
+   - X11 development libraries (for keyboard input)
+   - OpenSSL development libraries (for model downloading)
+
+#### MacOS
+3. Build and run:
+```bash
+cargo run --release --features metal
+```
+
+#### Linux
+3. Build and run:
+```bash
+cargo run --release --features cuda,x11  # Untested
+cargo run --release --features cuda,wayland
+```
+
 ### Using Nix
 
 ```bash
@@ -20,22 +41,9 @@ git clone https://github.com/yourusername/whispering.git
 cd whispering
 
 # Build and run using Nix
-nix develop -c cargo run
+nix build
 ```
 
-### Manual Installation
-
-1. Install Rust and Cargo from [rustup.rs](https://rustup.rs/)
-2. Install the required system dependencies:
-   - ALSA development libraries (for audio recording)
-   - X11 development libraries (for keyboard input)
-   - OpenSSL development libraries (for model downloading)
-
-3. Build and run:
-```bash
-cargo build --release
-cargo run --release
-```
 
 ## Configuration
 
