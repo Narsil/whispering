@@ -31,13 +31,14 @@
 #![deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
+use whisper_rs::install_logging_hooks;
 
 mod app;
+mod asr;
 mod audio;
 mod config;
 mod keyboard;
 mod logging;
-mod whisper;
 
 /// Main entry point for the Whispering application.
 ///
@@ -46,6 +47,7 @@ mod whisper;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
+    install_logging_hooks();
     logging::init_logging();
 
     // Create and run the application

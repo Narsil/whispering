@@ -11,4 +11,3 @@ pub fn init_logging() {
 
     info!("Logging system initialized");
 }
-

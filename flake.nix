@@ -75,7 +75,7 @@
 
       # Function to get system-specific cargo features
       getCargoFeatures =
-        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features cuda";
+        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features wayland,cuda";
     in
     {
       packages = forAllSystems (
@@ -91,30 +91,28 @@
           cargoMeta = parseCargoToml pkgs ./Cargo.toml;
         in
         {
-          default =
-            pkgs.rustPlatform.buildRustPackage {
-              pname = cargoMeta.name;
-              version = cargoMeta.version;
-              src = ./.;
-              cargoLock = {
-                lockFile = ./Cargo.lock;
-                outputHashes = {
-                  "rdev-0.5.3" = "sha256-Ynj4hhi2GNj5NLzCoOJywe6uEvxhhzHfkhqc72FqHy4=";
-                  "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
-                };
+          default = pkgs.rustPlatform.buildRustPackage.override { stdenv = pkgs.clangStdenv; } ({
+            pname = cargoMeta.name;
+            version = cargoMeta.version;
+            src = ./.;
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+              outputHashes = {
+                "rdev-0.5.3" = "sha256-Ws+690+zVIp+niZ7zgbCMSKPXjioiWuvCw30faOyIrA=";
+                "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
               };
-              cargoBuildFlags = getCargoFeatures pkgs system;
-              nativeBuildInputs =
-                with pkgs;
-                [
-                  pkg-config
-                  llvmPackages.libclang
-                  cmake
-                ]
-                ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
-              buildInputs = getBuildInputs pkgs system;
-            }
-            // getEnvVars pkgs system;
+            };
+            cargoBuildFlags = getCargoFeatures pkgs system;
+            nativeBuildInputs =
+              with pkgs;
+              [
+                pkg-config
+                llvmPackages.libclang
+                cmake
+              ]
+              ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
+            buildInputs = getBuildInputs pkgs system;
+          });
         }
       );
 
@@ -130,8 +128,8 @@
         in
         with pkgs;
         {
-          default =
-            pkgs.mkShell.override { stdenv = clangStdenv; } {
+          default = pkgs.mkShell.override { stdenv = clangStdenv; } (
+            {
               nativeBuildInputs = [
                 pkg-config
               ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
@@ -142,7 +140,8 @@
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
-            // getEnvVars pkgs system;
+            // (getEnvVars pkgs system)
+          );
         }
       );
     };

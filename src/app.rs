@@ -7,15 +7,16 @@ use anyhow::{Context, Result, anyhow};
 use log::{error, info};
 use notify_rust::Notification;
 use rdev::{EventType, Key, listen, simulate};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 use whisper_rs::install_logging_hooks;
 
+use crate::asr::{Asr, download_model};
 use crate::audio::AudioRecorder;
 use crate::config::Config;
 use crate::keyboard::paste;
-use crate::whisper::{download_model, run_whisper};
 
 /// Represents the current state of the application.
 ///
@@ -23,7 +24,7 @@ use crate::whisper::{download_model, run_whisper};
 /// audio recording is currently in progress.
 #[derive(Debug, PartialEq)]
 struct State {
-    pressed_keys: Vec<Key>,
+    pressed_keys: HashSet<Key>,
     recording: bool,
 }
 
@@ -35,7 +36,7 @@ struct State {
 pub struct App {
     state: State,
     recorder: AudioRecorder,
-    model_path: PathBuf,
+    asr: Asr,
     config: Config,
 }
 
@@ -55,6 +56,11 @@ impl App {
         config_file.push("config.toml");
         let config = Config::load()?;
 
+        // Warm the handle.
+        simulate(&EventType::KeyPress(Key::ControlLeft))?;
+        std::thread::sleep(Duration::from_millis(2));
+        simulate(&EventType::KeyRelease(Key::ControlLeft))?;
+
         // Initialize audio recorder
         let recorder = AudioRecorder::new(&config)?;
 
@@ -62,16 +68,17 @@ impl App {
         std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Download model if it doesn't exist
+        install_logging_hooks();
         let model_path = download_model(&config).await?;
 
-        install_logging_hooks();
+        let asr = Asr::new(&model_path)?;
         Ok(Self {
             state: State {
-                pressed_keys: Vec::new(),
+                pressed_keys: HashSet::new(),
                 recording: false,
             },
             recorder,
-            model_path,
+            asr,
             config,
         })
     }
@@ -101,7 +108,9 @@ impl App {
         );
 
         while let Some(event) = rchan.recv().await {
-            self.handle_event(event)?;
+            if let Err(err) = self.handle_event(event) {
+                error!("error handling event: {err}");
+            }
         }
         info!("Done exiting");
         Ok(())
@@ -115,26 +124,21 @@ impl App {
     fn handle_event(&mut self, event: rdev::Event) -> Result<()> {
         match event.event_type {
             EventType::KeyPress(key) => {
-                if !self.state.pressed_keys.contains(&key) {
-                    self.state.pressed_keys.push(key);
+                if self.config.shortcuts.keys.contains(&key) {
+                    self.state.pressed_keys.insert(key);
                 }
-
                 // Check if all required keys are pressed
-                let all_keys_pressed = self
-                    .config
-                    .shortcuts
-                    .keys
-                    .iter()
-                    .all(|required_key| self.state.pressed_keys.contains(required_key));
+                let all_keys_pressed = self.config.shortcuts.keys == self.state.pressed_keys;
 
                 if all_keys_pressed && !self.state.recording {
                     self.state.recording = true;
                     info!("Starting recording...");
                     self.recorder.start_recording()?;
+                    self.asr.load()?;
 
                     // Show desktop notification
                     Notification::new()
-                        .summary("Whispering")
+                        .summary("Recording...")
                         .body("Recording started")
                         .icon("audio-input-microphone")
                         .show()?;
@@ -144,25 +148,43 @@ impl App {
                 self.state.pressed_keys.retain(|&k| k != key);
 
                 // If we were recording and any required key is released, stop recording
-                if self.state.recording && self.config.shortcuts.keys.contains(&key) {
+                if self.state.recording && self.state.pressed_keys != self.config.shortcuts.keys {
                     self.state.recording = false;
                     info!("Stopping recording...");
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
-                    let output = run_whisper(&self.model_path, &wav_path)?;
+                    let output = self.asr.run(&wav_path)?;
+                    if output.is_empty() {
+                        // Show notification with transcribed text
+                        Notification::new()
+                            .summary("No voice detected")
+                            .body(&output)
+                            .icon("audio-input-microphone")
+                            .show()?;
+                        return Ok(());
+                    }
 
+                    // let output = "Toto".to_string();
+                    info!("Transcribed: {output}");
+                    let summary = if output.len() > 20 {
+                        &format!("{}..", &output[..20])
+                    } else {
+                        &output
+                    };
                     // Show notification with transcribed text
                     Notification::new()
-                        .summary("Whispering - Transcription Complete")
+                        .summary(summary)
                         .body(&output)
                         .icon("audio-input-microphone")
                         .show()?;
 
                     paste(output)?;
                     // Always end by pressing Return to submit
-                    std::thread::sleep(Duration::from_millis(200));
+                    std::thread::sleep(Duration::from_millis(2));
                     simulate(&EventType::KeyPress(Key::Return))?;
+                    std::thread::sleep(Duration::from_millis(2));
                     simulate(&EventType::KeyRelease(Key::Return))?;
+                    std::thread::sleep(Duration::from_millis(2));
                 }
             }
             _ => (),

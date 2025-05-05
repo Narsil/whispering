@@ -6,7 +6,10 @@
 use anyhow::{Context, Result};
 use rdev::Key;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 /// Audio recording configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,7 +80,7 @@ pub struct ModelConfig {
 #[derive(Debug, Clone)]
 pub struct ShortcutConfig {
     /// Keys that need to be pressed in sequence
-    pub keys: Vec<Key>,
+    pub keys: HashSet<Key>,
 }
 
 impl Serialize for ShortcutConfig {
@@ -119,6 +122,14 @@ impl<'de> Deserialize<'de> for ShortcutConfig {
             })
             .collect::<Result<Vec<Key>, _>>()?;
 
+        let hash_keys: HashSet<Key> = keys.iter().cloned().collect();
+        if hash_keys.len() != keys.len() {
+            return Err(serde::de::Error::custom(format!(
+                "Duplicate keys in {keys:?}"
+            )));
+        }
+        let keys = hash_keys;
+
         Ok(ShortcutConfig { keys })
     }
 }
@@ -126,7 +137,7 @@ impl<'de> Deserialize<'de> for ShortcutConfig {
 impl Default for ShortcutConfig {
     fn default() -> Self {
         Self {
-            keys: vec![Key::ControlLeft, Key::Space],
+            keys: HashSet::from([Key::ControlLeft, Key::Space]),
         }
     }
 }
@@ -528,9 +539,10 @@ mod tests {
             config.paths.recording_path,
             PathBuf::from("/tmp/test/recorded.wav")
         );
-        assert_eq!(config.shortcuts.keys.len(), 2);
-        assert!(matches!(config.shortcuts.keys[0], Key::ControlLeft));
-        assert!(matches!(config.shortcuts.keys[1], Key::Space));
+        assert_eq!(
+            config.shortcuts.keys,
+            HashSet::from([Key::ControlLeft, Key::Space])
+        );
     }
 
     #[test]
@@ -548,7 +560,7 @@ mod tests {
         config.model.filename = "test.bin".to_string();
         config.paths.cache_dir = PathBuf::from("/tmp/test");
         config.paths.recording_path = PathBuf::from("/tmp/test/recorded.wav");
-        config.shortcuts.keys = vec![Key::ControlLeft, Key::Alt, Key::Space];
+        config.shortcuts.keys = HashSet::from([Key::ControlLeft, Key::Alt, Key::Space]);
 
         // Save config to file
         config.save_to_file(&config_path).unwrap();
@@ -574,13 +586,7 @@ mod tests {
             loaded_config.paths.recording_path,
             config.paths.recording_path
         );
-        assert_eq!(
-            loaded_config.shortcuts.keys.len(),
-            config.shortcuts.keys.len()
-        );
-        for i in 0..config.shortcuts.keys.len() {
-            assert_eq!(loaded_config.shortcuts.keys[i], config.shortcuts.keys[i]);
-        }
+        assert_eq!(loaded_config.shortcuts.keys, config.shortcuts.keys);
     }
 
     #[test]
@@ -658,9 +664,10 @@ mod tests {
         );
 
         // Verify shortcuts
-        assert_eq!(config.shortcuts.keys.len(), 2);
-        assert!(matches!(config.shortcuts.keys[0], Key::ControlLeft));
-        assert!(matches!(config.shortcuts.keys[1], Key::Space));
+        assert_eq!(
+            config.shortcuts.keys,
+            HashSet::from([Key::ControlLeft, Key::Space])
+        );
     }
 
     #[test]
@@ -693,13 +700,7 @@ mod tests {
             deserialized.paths.recording_path,
             config.paths.recording_path
         );
-        assert_eq!(
-            deserialized.shortcuts.keys.len(),
-            config.shortcuts.keys.len()
-        );
-        for i in 0..config.shortcuts.keys.len() {
-            assert_eq!(deserialized.shortcuts.keys[i], config.shortcuts.keys[i]);
-        }
+        assert_eq!(deserialized.shortcuts.keys, config.shortcuts.keys);
         Ok(())
     }
 }
