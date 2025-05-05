@@ -49,6 +49,9 @@
             alsa-lib
             alsa-utils
             openssl
+            wayland
+            wayland-protocols
+            wayland-scanner
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.cuda_nvcc
@@ -71,11 +74,22 @@
         else
           {
             LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib";
+            CUDA_PATH = "${pkgs.cudaPackages.cudatoolkit}";
+            EXTRA_LDFLAGS = "-L${pkgs.cudaPackages.cudatoolkit}/lib/stubs";
+            CUDA_TOOLKIT_ROOT_DIR = "${pkgs.cudaPackages.cudatoolkit}";
+            CMAKE_CUDA_COMPILER = "${pkgs.cudaPackages.cuda_nvcc}/bin/nvcc";
           };
 
       # Function to get system-specific cargo features
       getCargoFeatures =
-        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features wayland,cuda";
+        pkgs: system:
+        if pkgs.stdenv.isDarwin then
+          [ "metal" ]
+        else
+          [
+            "wayland"
+            "cuda"
+          ];
     in
     {
       packages = forAllSystems (
@@ -103,16 +117,35 @@
                   "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
                 };
               };
-              cargoBuildFlags = getCargoFeatures pkgs system;
+              buildFeatures = getCargoFeatures pkgs system;
+              CMAKE_ARGS =
+                if pkgs.stdenv.isDarwin then
+                  ""
+                else
+                  "-DCMAKE_CUDA_COMPILER=${pkgs.cudaPackages.cuda_nvcc}/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=all -DCUDA_TOOLKIT_ROOT_DIR=${pkgs.cudaPackages.cudatoolkit} -DCUDA_INCLUDE_DIRS=${pkgs.cudaPackages.cudatoolkit}/include -DCUDA_CUDART_LIBRARY=${pkgs.cudaPackages.cuda_cudart}/lib/libcudart.so -DCUDA_NVCC_EXECUTABLE=${pkgs.cudaPackages.cuda_nvcc}/bin/nvcc";
               nativeBuildInputs =
                 with pkgs;
                 [
                   pkg-config
-                  llvmPackages.libclang
                   cmake
                 ]
-                ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
-              buildInputs = getBuildInputs pkgs system;
+                ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ cudaPackages.cuda_nvcc ]);
+              buildInputs =
+                [
+                  pkgs.llvmPackages.libclang
+                ]
+                ++ (
+                  if pkgs.stdenv.isDarwin then
+                    [ ]
+                  else
+                    with pkgs.cudaPackages;
+                    [
+                      cuda_cudart
+                      cuda_nvcc
+                      cudatoolkit
+                    ]
+                )
+                ++ getBuildInputs pkgs system;
             }
             // (getEnvVars pkgs system)
           );
@@ -133,13 +166,16 @@
         {
           default = pkgs.mkShell.override { stdenv = clangStdenv; } (
             {
-              nativeBuildInputs = [
-                pkg-config
-              ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
+              nativeBuildInputs =
+                with pkgs;
+                [
+                  pkg-config
+                  cmake
+                ]
+                ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ cudaPackages.cuda_nvcc ]);
               buildInputs = [
                 rustup
                 llvmPackages.libclang
-                cmake
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
