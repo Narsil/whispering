@@ -77,7 +77,9 @@ recording_path = "~/.cache/whispering/recorded.wav"
 [shortcuts]
 # Keys that need to be pressed in sequence to start recording
 # Available keys: control, alt, shift, super, space, enter, r, and many others
-keys = ["control", "space"]
+keys = ["ControlLeft", "Space"]
+# Automatically hit enter after sending the text (so sends a message in usual contexts).
+autosend = false
 ```
 
 ### Configuration Options
