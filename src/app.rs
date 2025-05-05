@@ -68,7 +68,7 @@ impl App {
         std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Download model if it doesn't exist
-        // install_logging_hooks();
+        install_logging_hooks();
         let model_path = download_model(&config).await?;
 
         let asr = Asr::new(&model_path)?;
@@ -180,7 +180,7 @@ impl App {
 
                     paste(output)?;
                     // Always end by pressing Return to submit
-                    if self.config.shortcuts.autosend{
+                    if self.config.shortcuts.autosend {
                         std::thread::sleep(Duration::from_millis(2));
                         simulate(&EventType::KeyPress(Key::Return))?;
                         std::thread::sleep(Duration::from_millis(2));

@@ -1,21 +1,22 @@
 # This file defines the package with its variants
-{ lib
-, stdenv
-, rustPlatform
-, pkg-config
-, cmake
-, llvmPackages
-, openssl
-, darwin
-, udev
-, libinput
-, alsa-lib
-, alsa-utils
-, wayland
-, wayland-protocols
-, wayland-scanner
-, xorg
-, cudaPackages
+{
+  lib,
+  stdenv,
+  rustPlatform,
+  pkg-config,
+  cmake,
+  llvmPackages,
+  openssl,
+  darwin,
+  udev,
+  libinput,
+  alsa-lib,
+  alsa-utils,
+  wayland,
+  wayland-protocols,
+  wayland-scanner,
+  xorg,
+  cudaPackages,
 }:
 
 let
@@ -50,7 +51,13 @@ let
   };
 
   # Base derivation function
-  mkWhispering = { features ? [], extraBuildInputs ? [], extraEnvVars ? {}, cmakeArgs ? "" }:
+  mkWhispering =
+    {
+      features ? [ ],
+      extraBuildInputs ? [ ],
+      extraEnvVars ? { },
+      cmakeArgs ? "",
+    }:
     rustPlatform.buildRustPackage.override { inherit stdenv; } rec {
       pname = "whispering";
       version = "0.1.0";
@@ -101,7 +108,10 @@ in
 
   # Linux Wayland variant with CUDA support
   linux-wayland = mkWhispering {
-    features = [ "wayland" "cuda" ];
+    features = [
+      "wayland"
+      "cuda"
+    ];
     extraBuildInputs = [
       udev
       libinput
@@ -118,7 +128,10 @@ in
 
   # Linux X11 variant with CUDA support
   linux-x11 = mkWhispering {
-    features = [ "x11" "cuda" ];
+    features = [
+      "x11"
+      "cuda"
+    ];
     extraBuildInputs = [
       udev
       libinput
@@ -129,8 +142,9 @@ in
       xorg.libXcursor
       xorg.libXrandr
       xorg.libXi
+      xorg.libXtst
     ] ++ cudaConfig.buildInputs;
     extraEnvVars = cudaConfig.envVars;
     cmakeArgs = cudaConfig.cmakeArgs;
   };
-} 
+}
