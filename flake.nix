@@ -75,7 +75,7 @@
 
       # Function to get system-specific cargo features
       getCargoFeatures =
-        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features cuda";
+        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features wayland,cuda";
     in
     {
       packages = forAllSystems (
@@ -99,7 +99,7 @@
               cargoLock = {
                 lockFile = ./Cargo.lock;
                 outputHashes = {
-                  "rdev-0.5.3" = "sha256-Ynj4hhi2GNj5NLzCoOJywe6uEvxhhzHfkhqc72FqHy4=";
+                  "rdev-0.5.3" = "sha256-Ws+690+zVIp+niZ7zgbCMSKPXjioiWuvCw30faOyIrA=";
                   "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
                 };
               };
