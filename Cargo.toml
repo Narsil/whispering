@@ -13,7 +13,7 @@ hf-hub = { version = "0.4.2", features = ["tokio"] }
 hound = "3.5.1"
 log = "0.4.27"
 notify-rust = "4.10.0"
-rdev = { git = "https://github.com/Narsil/rdev", rev = "1934f946d04b4426110211241a1447c8c41c0887" }
+rdev = { git = "https://github.com/Narsil/rdev", rev = "6e2dd5035e19c8b9fa52abf59b7ed6a1a89d7448" }
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
@@ -22,15 +22,16 @@ tokio = { version = "1.44.2", features = ["full"] }
 whisper-rs = { git = "https://github.com/Narsil/whisper-rs.git", rev = "171471d2b3615f54a1f6c87d70ee88f54b1126a9" }
 samplerate = "0.2.4"
 rubato = "0.16.2"
-arboard = "3.5.0"
+arboard = { version = "3.5.0", optional = true }
+wl-clipboard-rs = { version = "0.9.2", optional = true }
 
 
 [features]
 jack = ["cpal/jack"]
 cuda = ["whisper-rs/cuda"]
 metal = ["whisper-rs/metal"]
-wayland = ["rdev/wayland"]
-x11 = ["rdev/x11"]
+wayland = ["rdev/wayland", "wl-clipboard-rs"]
+x11 = ["rdev/x11", "arboard"]
 
 [dev-dependencies]
 tempfile = "3.8"

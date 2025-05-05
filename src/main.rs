@@ -31,6 +31,7 @@
 #![deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
+use whisper_rs::install_logging_hooks;
 
 mod app;
 mod asr;
@@ -46,6 +47,7 @@ mod logging;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
+    install_logging_hooks();
     logging::init_logging();
 
     // Create and run the application

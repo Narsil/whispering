@@ -56,6 +56,11 @@ impl App {
         config_file.push("config.toml");
         let config = Config::load()?;
 
+        // Warm the handle.
+        simulate(&EventType::KeyPress(Key::ControlLeft))?;
+        std::thread::sleep(Duration::from_millis(2));
+        simulate(&EventType::KeyRelease(Key::ControlLeft))?;
+
         // Initialize audio recorder
         let recorder = AudioRecorder::new(&config)?;
 
@@ -63,9 +68,9 @@ impl App {
         std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Download model if it doesn't exist
+        install_logging_hooks();
         let model_path = download_model(&config).await?;
 
-        install_logging_hooks();
         let asr = Asr::new(&model_path)?;
         Ok(Self {
             state: State {
@@ -129,6 +134,7 @@ impl App {
                     self.state.recording = true;
                     info!("Starting recording...");
                     self.recorder.start_recording()?;
+                    self.asr.load()?;
 
                     // Show desktop notification
                     Notification::new()
@@ -148,6 +154,16 @@ impl App {
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
                     let output = self.asr.run(&wav_path)?;
+                    if output.is_empty() {
+                        // Show notification with transcribed text
+                        Notification::new()
+                            .summary("No voice detected")
+                            .body(&output)
+                            .icon("audio-input-microphone")
+                            .show()?;
+                        return Ok(());
+                    }
+
                     // let output = "Toto".to_string();
                     info!("Transcribed: {output}");
                     let summary = if output.len() > 20 {
@@ -164,9 +180,11 @@ impl App {
 
                     paste(output)?;
                     // Always end by pressing Return to submit
+                    std::thread::sleep(Duration::from_millis(2));
                     simulate(&EventType::KeyPress(Key::Return))?;
+                    std::thread::sleep(Duration::from_millis(2));
                     simulate(&EventType::KeyRelease(Key::Return))?;
-                    std::thread::sleep(Duration::from_millis(20));
+                    std::thread::sleep(Duration::from_millis(2));
                 }
             }
             _ => (),

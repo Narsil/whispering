@@ -3,11 +3,13 @@
 //! This module provides functionality for downloading and running the Whisper model
 //! for speech-to-text transcription. It handles model management and audio processing.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use hf_hub::api::tokio::ApiBuilder;
 use hound::{SampleFormat, WavReader};
 use std::path::{Path, PathBuf};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
 
 use crate::config::Config;
 
@@ -27,23 +29,34 @@ pub struct Asr {
     // accelerator's memory used.
     // context: WhisperContext,
     model_path: PathBuf,
+
+    context: Option<(WhisperContext, WhisperState)>,
 }
 
 impl Asr {
     pub fn new(model_path: &Path) -> Result<Self> {
         Ok(Self {
             model_path: model_path.to_path_buf(),
+            context: None,
         })
     }
-    /// Runs the Whisper model on the given audio file.
-    ///
-    /// This function takes a path to a WAV file and returns the transcribed text.
-    pub fn run(&self, wav_path: &Path) -> Result<String> {
+
+    pub fn load(&mut self) -> Result<()> {
         let context = WhisperContext::new_with_params(
             &self.model_path.to_string_lossy(),
             WhisperContextParameters::default(),
         )?;
-        let mut state = context.create_state()?;
+        let state = context.create_state()?;
+        self.context = Some((context, state));
+        Ok(())
+    }
+
+    /// Runs the Whisper model on the given audio file.
+    ///
+    /// This function takes a path to a WAV file and returns the transcribed text.
+    pub fn run(&mut self, wav_path: &Path) -> Result<String> {
+        // Take context to let it drop later.
+        let (_context, mut state) = self.context.take().ok_or(anyhow!("Context was not warm"))?;
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_print_special(false);
