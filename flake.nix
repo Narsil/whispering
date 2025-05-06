@@ -191,11 +191,16 @@
                 };
                 prompt = lib.mkOption {
                   type = lib.types.attrsOf lib.types.anything;
-                  default = { type = "none"; };
+                  default = {
+                    type = "none";
+                  };
                   description = "Prompt configuration for the model.";
                   example = {
                     type = "vocabulary";
-                    vocabulary = [ "word1" "word2" ];
+                    vocabulary = [
+                      "word1"
+                      "word2"
+                    ];
                   };
                 };
                 replacements = lib.mkOption {
@@ -281,11 +286,6 @@
                 group = cfg.group;
                 home = cfg.dataDir;
                 createHome = true;
-                extraGroups = [
-                  "input"
-                  "audio"
-                  "video"
-                ];
               };
             };
 
@@ -321,13 +321,6 @@
               KERNEL=="event*", GROUP="${cfg.group}", MODE="0660"
             '';
 
-            systemd.services.reload-udev = {
-              description = "Reload udev rules";
-              wantedBy = [ "multi-user.target" ];
-              after = [ "systemd-udevd.service" ];
-              serviceConfig.ExecStart = "${pkgs.udev}/bin/udevadm control --reload-rules && ${pkgs.udev}/bin/udevadm trigger";
-            };
-
             systemd.services.whispering = {
               description = "Whispering service";
               wantedBy = [ "multi-user.target" ];
@@ -342,7 +335,7 @@
                 RestartSec = "10s";
                 # Required for CUDA and audio
                 SupplementaryGroups = [
-                  "input"
+                  "${cfg.group}"
                 ];
                 # Display server specific environment variables
                 Environment = displayEnv ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);
