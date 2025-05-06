@@ -19,10 +19,28 @@ pub struct AudioConfig {
     pub channels: u16,
     /// Sample rate in Hz
     pub sample_rate: u32,
-    /// Bits per sample
-    pub bits_per_sample: u16,
     /// Sample format (Float or Int)
     pub sample_format: SampleFormat,
+    /// Audio input device name (e.g., "sysdefault:CARD=C920")
+    /// If not specified, the default device will be used
+    pub device: Option<String>,
+}
+
+impl From<SampleFormat> for cpal::SampleFormat {
+    fn from(value: SampleFormat) -> Self {
+        match value {
+            SampleFormat::I8 => cpal::SampleFormat::I8,
+            SampleFormat::I16 => cpal::SampleFormat::I16,
+            SampleFormat::I32 => cpal::SampleFormat::I32,
+            SampleFormat::I64 => cpal::SampleFormat::I64,
+            SampleFormat::U8 => cpal::SampleFormat::U8,
+            SampleFormat::U16 => cpal::SampleFormat::U16,
+            SampleFormat::U32 => cpal::SampleFormat::U32,
+            SampleFormat::U64 => cpal::SampleFormat::U64,
+            SampleFormat::F32 => cpal::SampleFormat::F32,
+            SampleFormat::F64 => cpal::SampleFormat::F64,
+        }
+    }
 }
 
 /// Sample format for audio recording.
@@ -30,10 +48,53 @@ pub struct AudioConfig {
 #[cfg_attr(test, derive(PartialEq))]
 #[serde(rename_all = "lowercase")]
 pub enum SampleFormat {
-    /// 32-bit floating point samples
-    Float,
-    /// 16-bit integer samples
-    Int,
+    /// `i8` with a valid range of 'u8::MIN..=u8::MAX' with `0` being the origin
+    I8,
+
+    /// `i16` with a valid range of 'u16::MIN..=u16::MAX' with `0` being the origin
+    I16,
+
+    // /// `I24` with a valid range of '-(1 << 23)..(1 << 23)' with `0` being the origin
+    // I24,
+    /// `i32` with a valid range of 'u32::MIN..=u32::MAX' with `0` being the origin
+    I32,
+
+    // /// `I24` with a valid range of '-(1 << 47)..(1 << 47)' with `0` being the origin
+    // I48,
+    /// `i64` with a valid range of 'u64::MIN..=u64::MAX' with `0` being the origin
+    I64,
+
+    /// `u8` with a valid range of 'u8::MIN..=u8::MAX' with `1 << 7 == 128` being the origin
+    U8,
+
+    /// `u16` with a valid range of 'u16::MIN..=u16::MAX' with `1 << 15 == 32768` being the origin
+    U16,
+
+    // /// `U24` with a valid range of '0..16777216' with `1 << 23 == 8388608` being the origin
+    // U24,
+    /// `u32` with a valid range of 'u32::MIN..=u32::MAX' with `1 << 31` being the origin
+    U32,
+
+    // /// `U48` with a valid range of '0..(1 << 48)' with `1 << 47` being the origin
+    // U48,
+    /// `u64` with a valid range of 'u64::MIN..=u64::MAX' with `1 << 63` being the origin
+    U64,
+
+    /// `f32` with a valid range of `-1.0..1.0` with `0.0` being the origin
+    F32,
+
+    /// `f64` with a valid range of -1.0..1.0 with 0.0 being the origin
+    F64,
+}
+
+impl SampleFormat {
+    pub fn bits_per_sample(&self) -> u16 {
+        match self {
+            Self::F32 => 32,
+            Self::I16 => 16,
+            _ => todo!("unimplemented bits per sample"),
+        }
+    }
 }
 
 impl Default for AudioConfig {
@@ -41,8 +102,8 @@ impl Default for AudioConfig {
         Self {
             channels: 1,
             sample_rate: 16000,
-            bits_per_sample: 32,
-            sample_format: SampleFormat::Float,
+            sample_format: SampleFormat::F32,
+            device: None,
         }
     }
 }
@@ -234,7 +295,6 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.audio.channels, 1);
         assert_eq!(config.audio.sample_rate, 16000);
-        assert_eq!(config.audio.bits_per_sample, 32);
         assert!(matches!(config.audio.sample_format, SampleFormat::Float));
         assert_eq!(config.model.repo, "ggerganov/whisper.cpp");
         assert_eq!(config.model.filename, "ggml-base.en.bin");
@@ -249,7 +309,6 @@ mod tests {
         println!("TOML output:\n{}", toml); // Debug print
         assert!(toml.contains("channels = 1"));
         assert!(toml.contains("sample_rate = 16000"));
-        assert!(toml.contains("bits_per_sample = 32"));
         assert!(toml.contains("sample_format = \"float\""));
         assert!(toml.contains("repo = \"ggerganov/whisper.cpp\""));
         assert!(toml.contains("filename = \"ggml-base.en.bin\""));
@@ -263,7 +322,6 @@ mod tests {
             [audio]
             channels = 2
             sample_rate = 48000
-            bits_per_sample = 16
             sample_format = "int"
 
             [model]
@@ -284,7 +342,6 @@ mod tests {
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.audio.channels, 2);
         assert_eq!(config.audio.sample_rate, 48000);
-        assert_eq!(config.audio.bits_per_sample, 16);
         assert!(matches!(config.audio.sample_format, SampleFormat::Int));
         assert_eq!(config.model.repo, "test/repo");
         assert_eq!(config.model.filename, "test.bin");
@@ -339,7 +396,6 @@ mod tests {
             [audio]
             channels = 1
             sample_rate = 16000
-            bits_per_sample = 32
             sample_format = "float"
 
             [model]
@@ -358,7 +414,6 @@ mod tests {
             [audio]
             channels = 1
             sample_rate = 16000
-            bits_per_sample = 32
             sample_format = "float"
 
             [model]
@@ -381,7 +436,6 @@ mod tests {
         // Verify audio settings
         assert_eq!(config.audio.channels, 1);
         assert_eq!(config.audio.sample_rate, 16000);
-        assert_eq!(config.audio.bits_per_sample, 32);
         assert!(matches!(config.audio.sample_format, SampleFormat::Float));
 
         // Verify model settings
@@ -412,7 +466,6 @@ mod tests {
         let mut config = Config::default();
         config.audio.channels = 2;
         config.audio.sample_rate = 48000;
-        config.audio.bits_per_sample = 16;
         config.audio.sample_format = SampleFormat::Int;
         config.model.repo = "test/repo".to_string();
         config.model.filename = "test.bin".to_string();
@@ -432,10 +485,6 @@ mod tests {
         // Verify loaded config matches original
         assert_eq!(loaded_config.audio.channels, config.audio.channels);
         assert_eq!(loaded_config.audio.sample_rate, config.audio.sample_rate);
-        assert_eq!(
-            loaded_config.audio.bits_per_sample,
-            config.audio.bits_per_sample
-        );
         assert!(matches!(
             loaded_config.audio.sample_format,
             SampleFormat::Int
@@ -472,7 +521,6 @@ mod tests {
             [audio]
             channels = "invalid"  # Should be a number
             sample_rate = 48000
-            bits_per_sample = 16
             sample_format = "int"
         "#;
 
@@ -494,7 +542,6 @@ mod tests {
         // Verify default values
         assert_eq!(config.audio.channels, 1);
         assert_eq!(config.audio.sample_rate, 16000);
-        assert_eq!(config.audio.bits_per_sample, 32);
         assert!(matches!(config.audio.sample_format, SampleFormat::Float));
         assert_eq!(config.model.repo, "ggerganov/whisper.cpp");
         assert_eq!(config.model.filename, "ggml-base.en.bin");

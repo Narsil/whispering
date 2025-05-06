@@ -10,6 +10,7 @@ use cpal::{FromSample, Sample, StreamConfig};
 use hound::{WavSpec, WavWriter};
 use log::{error, info};
 use rubato::{FftFixedInOut, Resampler};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
@@ -60,10 +61,11 @@ impl AudioRecorder {
         WavSpec {
             channels: config.channels,
             sample_rate: config.sample_rate,
-            bits_per_sample: config.bits_per_sample,
+            bits_per_sample: config.sample_format.bits_per_sample(),
             sample_format: match config.sample_format {
-                crate::config::SampleFormat::Float => hound::SampleFormat::Float,
-                crate::config::SampleFormat::Int => hound::SampleFormat::Int,
+                crate::config::SampleFormat::F32 => hound::SampleFormat::Float,
+                crate::config::SampleFormat::I16 => hound::SampleFormat::Int,
+                _ => panic!("Unimplemented"),
             },
         }
     }
@@ -78,54 +80,54 @@ impl AudioRecorder {
         info!("Default host: {:?}", host.id());
 
         let devices = host.input_devices()?;
-        // info!("Available input devices:");
-        // for device in devices.iter() {
+        let names: HashSet<_> = devices.into_iter().flat_map(|d| d.name()).collect();
+        info!("Available input devices: {names:?}");
+        // for device in devices {
         //     if let Ok(name) = device.name() {
         //         info!("  - {}", name);
+        //         if let Ok(supported_configs) = device.supported_input_configs() {
+        //             for config in supported_configs {
+        //                 info!("    Supported config: {:?}", config);
+        //             }
+        //         }
         //     }
         // }
 
-        // Try to find the C920 device first
-        let device = devices
-            .filter(|d| {
-                if let Ok(name) = d.name() {
-                    name.contains("C920")
-                } else {
-                    false
-                }
-            })
-            .next()
-            .or_else(|| host.default_input_device())
-            .ok_or_else(|| anyhow!("Cannot find input device"))?;
+        let devices = host.input_devices()?;
+        // Find the requested device or use default
+        let device = if let Some(device_name) = &config.audio.device {
+            devices
+                .filter(|d| {
+                    if let Ok(name) = d.name() {
+                        name == *device_name
+                    } else {
+                        false
+                    }
+                })
+                .next()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Requested audio device '{}' not found, available: {:?}",
+                        device_name,
+                        names
+                    )
+                })?
+        } else {
+            host.default_input_device()
+                .ok_or_else(|| anyhow!("No default input device found"))?
+        };
 
         info!("Using input device: {}", device.name()?);
 
-        let stream_config = StreamConfig {
-            channels: config.audio.channels,
-            sample_rate: cpal::SampleRate(config.audio.sample_rate),
-            buffer_size: cpal::BufferSize::Default,
-        };
+        // Get device's default config
+        let default_config = device
+            .default_input_config()
+            .context("Failed to get default config")?;
 
-        // Check for supported formats
-        if let Ok(mut supported_configs) = device
-            .supported_input_configs()
-            .context("Getting supported configs")
-        {
-            let has_desired_format = supported_configs.any(|f| {
-                f.min_sample_rate().0 <= config.audio.sample_rate
-                    && f.max_sample_rate().0 >= config.audio.sample_rate
-                    && f.channels() == config.audio.channels
-                    && f.sample_format()
-                        == match config.audio.sample_format {
-                            crate::config::SampleFormat::Float => cpal::SampleFormat::F32,
-                            crate::config::SampleFormat::Int => cpal::SampleFormat::I16,
-                        }
-            });
+        info!("Device default config: {:?}", default_config);
 
-            if !has_desired_format {
-                info!("Desired format not explicitly supported, falling back to resampling");
-            }
-        }
+        // Create stream config based on device capabilities
+        let stream_config: StreamConfig = default_config.clone().into();
 
         // Create cache directory if it doesn't exist
         std::fs::create_dir_all(&config.paths.cache_dir).context("Creating cache directory")?;
@@ -142,38 +144,34 @@ impl AudioRecorder {
             error!("Audio stream error: {}", err);
         };
 
-        let stream = if let Ok(stream) = device.build_input_stream(
-            &stream_config,
-            move |data, _: &_| Self::write_input_data::<f32, f32>(data, &writer2),
-            err_fn,
-            None,
-        ) {
-            stream
+        // Create resampler if needed
+        let resampler = if default_config.sample_rate().0 != config.audio.sample_rate
+            || default_config.sample_format() != config.audio.sample_format.into()
+            || default_config.channels() != config.audio.channels
+        {
+            if default_config.sample_format() != config.audio.sample_format.into() {
+                todo!("Unimplemented resampling samples");
+            }
+            Some(Resample {
+                samplerate_in: default_config.sample_rate().0,
+                samplerate_out: 16000,
+                in_channels: default_config.channels(),
+            })
         } else {
-            let default_config = device
-                .default_input_config()
-                .context("Failed to get default config")?;
-            let samplerate_in = default_config.sample_rate().0;
-            let samplerate_out = stream_config.sample_rate.0;
-            let writer3 = writer.clone();
-            let in_channels = default_config.channels();
-            let sconfig: StreamConfig = default_config.into();
-            let resample = Resample {
-                samplerate_in,
-                samplerate_out,
-                in_channels,
-            };
-            device
-                .build_input_stream(
-                    &sconfig,
-                    move |data, _: &_| {
-                        Self::write_input_data_sample::<f32, f32>(data, &writer3, Some(resample))
-                    },
-                    err_fn,
-                    None,
-                )
-                .context("Failed to create fallback stream")?
+            None
         };
+
+        let stream = device
+            .build_input_stream(
+                &stream_config,
+                move |data, _: &_| {
+                    Self::write_input_data_sample::<f32, f32>(data, &writer2, resampler);
+                },
+                err_fn,
+                None,
+            )
+            .context("Failed to create audio stream")?;
+
         stream.pause().context("Cannot pause")?;
 
         Ok(Self {
@@ -271,17 +269,5 @@ impl AudioRecorder {
                 }
             }
         }
-    }
-
-    /// Writes audio data to the WAV file.
-    ///
-    /// This function is called by the audio stream callback to write the captured
-    /// audio data to the WAV file.
-    fn write_input_data<T, U>(input: &[T], writer: &WavWriterHandle)
-    where
-        T: Sample + rubato::Sample,
-        U: Sample + hound::Sample + FromSample<T>,
-    {
-        Self::write_input_data_sample::<T, U>(input, writer, None)
     }
 }
