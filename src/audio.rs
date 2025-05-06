@@ -16,7 +16,7 @@ use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::config::{AudioConfig, Config};
+use crate::config::{AudioConfig, Config, SampleFormat};
 
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>;
 
@@ -146,10 +146,10 @@ impl AudioRecorder {
 
         // Create resampler if needed
         let resampler = if default_config.sample_rate().0 != config.audio.sample_rate
-            || default_config.sample_format() != config.audio.sample_format.into()
+            || default_config.sample_format() != cpal::SampleFormat::F32
             || default_config.channels() != config.audio.channels
         {
-            if default_config.sample_format() != config.audio.sample_format.into() {
+            if default_config.sample_format() != cpal::SampleFormat::F32 {
                 todo!("Unimplemented resampling samples");
             }
             Some(Resample {
