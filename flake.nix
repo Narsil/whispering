@@ -76,10 +76,44 @@
       getCargoFeatures =
         pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features wayland,cuda";
 
+      # Build the package
+      buildPackage = system:
+        let
+          overlays = [ (import rust-overlay) ];
+          pkgs = import nixpkgs {
+            inherit system overlays;
+            config.allowUnfree = !pkgs.stdenv.isDarwin;
+            config.cudaSupport = !pkgs.stdenv.isDarwin;
+          };
+          pkg = pkgs.callPackage ./nix/package.nix { };
+        in
+        if pkgs.stdenv.isDarwin then
+          pkg.darwin
+        else
+          pkg.linux-wayland;
+
       # NixOS module
       nixosModule = { config, lib, pkgs, ... }:
         let
           cfg = config.services.whispering;
+          # Detect display server
+          isWayland = true;
+          # Get display server specific environment variables
+          displayEnv =
+            if isWayland then
+              [
+                "XDG_RUNTIME_DIR=/run/user/1000"
+                "WAYLAND_DISPLAY=wayland-0"
+              ]
+            else
+              [
+                "DISPLAY=:0"
+                "XAUTHORITY=/home/${cfg.user}/.Xauthority"
+              ];
+          # Get display server specific cargo features
+          displayFeatures = if isWayland then "wayland" else "x11";
+          # Create TOML format
+          tomlFormat = pkgs.formats.toml { };
         in
         {
           options.services.whispering = {
@@ -87,7 +121,7 @@
 
             package = lib.mkOption {
               type = lib.types.package;
-              default = pkgs.whispering;
+              default = buildPackage pkgs.system;
               description = "The Whispering package to use.";
             };
 
@@ -129,7 +163,10 @@
                   description = "Bits per sample.";
                 };
                 sample_format = lib.mkOption {
-                  type = lib.types.enum [ "float" "int" ];
+                  type = lib.types.enum [
+                    "float"
+                    "int"
+                  ];
                   default = "float";
                   description = "Sample format (float or int).";
                 };
@@ -167,13 +204,34 @@
               shortcuts = {
                 keys = lib.mkOption {
                   type = lib.types.listOf lib.types.str;
-                  default = [ "ControlLeft" "Space" ];
+                  default = [
+                    "ControlLeft"
+                    "Space"
+                  ];
                   description = "Keys that need to be pressed in sequence to start recording.";
                 };
                 autosend = lib.mkOption {
                   type = lib.types.bool;
                   default = false;
                   description = "Automatically hit enter after sending the text.";
+                };
+              };
+
+              # Vocabulary settings
+              vocabulary = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = "List of words to improve recognition accuracy.";
+              };
+
+              # Replacement settings
+              replacements = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = "Map of text to replace with their replacements.";
+                example = {
+                  "text to replace" = "replacement text";
+                  "another text" = "another replacement";
                 };
               };
             };
@@ -200,6 +258,7 @@
                 group = cfg.group;
                 home = cfg.dataDir;
                 createHome = true;
+                extraGroups = [ "input" "audio" "video" ];
               };
             };
 
@@ -209,14 +268,28 @@
 
             # Create configuration file
             environment.etc."whispering/config.toml" = {
-              text = builtins.toTOML {
+              source = tomlFormat.generate "whispering-config" {
                 audio = cfg.settings.audio;
                 model = cfg.settings.model;
                 paths = cfg.settings.paths;
                 shortcuts = cfg.settings.shortcuts;
+                vocabulary = cfg.settings.vocabulary;
+                replacements = cfg.settings.replacements;
               };
               mode = "0644";
             };
+
+            # Add udev rules for input device access
+            services.udev.packages = [ (pkgs.runCommand "whispering-udev-rules" { } ''
+              mkdir -p $out/lib/udev/rules.d
+              cat > $out/lib/udev/rules.d/99-whispering.rules << EOF
+              # Allow whispering user to access /dev/uinput
+              KERNEL=="uinput", GROUP="input", MODE="0660"
+              
+              # Allow whispering user to access input devices
+              KERNEL=="event*", GROUP="input", MODE="0660"
+              EOF
+            '') ];
 
             systemd.services.whispering = {
               description = "Whispering service";
@@ -231,12 +304,13 @@
                 Restart = "on-failure";
                 RestartSec = "10s";
                 # Required for CUDA and audio
-                SupplementaryGroups = [ "audio" "video" "input" ];
-                # Required for Wayland
-                Environment = [
-                  "XDG_RUNTIME_DIR=/run/user/1000"
-                  "WAYLAND_DISPLAY=wayland-0"
-                ] ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);
+                SupplementaryGroups = [
+                  "audio"
+                  "video"
+                  "input"
+                ];
+                # Display server specific environment variables
+                Environment = displayEnv ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);
                 # Additional service configuration
               } // cfg.serviceConfig;
             };
@@ -244,48 +318,13 @@
         };
     in
     {
-      packages = forAllSystems (system:
-        let
-          overlays = [ (import rust-overlay) ];
-          pkgs = import nixpkgs {
-            inherit system overlays;
-            config.allowUnfree = !pkgs.stdenv.isDarwin;
-            config.cudaSupport = !pkgs.stdenv.isDarwin;
-          };
-          # Parse Cargo.toml
-          cargoMeta = parseCargoToml pkgs ./Cargo.toml;
-        in
-        {
-          default = pkgs.rustPlatform.buildRustPackage.override { stdenv = pkgs.clangStdenv; } (
-            {
-              pname = cargoMeta.name;
-              version = cargoMeta.version;
-              src = ./.;
-              cargoLock = {
-                lockFile = ./Cargo.lock;
-                outputHashes = {
-                  "rdev-0.5.3" = "sha256-Ws+690+zVIp+niZ7zgbCMSKPXjioiWuvCw30faOyIrA=";
-                  "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
-                };
-              };
-              cargoBuildFlags = getCargoFeatures pkgs system;
-              nativeBuildInputs =
-                with pkgs;
-                [
-                  pkg-config
-                ]
-                ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
-              buildInputs = [
-                pkgs.llvmPackages.libclang
-                pkgs.cmake
-              ] ++ getBuildInputs pkgs system;
-            }
-            // (getEnvVars pkgs system)
-          );
-        }
-      );
+      packages = forAllSystems (system: {
+        default = buildPackage system;
+        whispering = buildPackage system;
+      });
 
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           overlays = [ (import rust-overlay) ];
           pkgs = import nixpkgs {
@@ -300,11 +339,11 @@
             {
               nativeBuildInputs = [
                 pkg-config
+                cmake
               ] ++ (if pkgs.stdenv.isDarwin then [ clang ] else [ ]);
               buildInputs = [
                 rustup
                 llvmPackages.libclang
-                cmake
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
@@ -314,11 +353,19 @@
       );
 
       # Add NixOS module
-      nixosModules.default = nixosModule;
+      nixosModules = {
+        default = nixosModule;
+        whispering = nixosModule; # Add an alias for easier importing
+      };
 
       # Add overlay to make the package available in nixpkgs
-      overlays.default = final: prev: {
-        whispering = final.callPackage ./nix/package.nix { };
+      overlays = {
+        default = final: prev: {
+          whispering = final.callPackage ./nix/package.nix { };
+        };
+        whispering = final: prev: {
+          whispering = final.callPackage ./nix/package.nix { };
+        };
       };
     };
 }

@@ -18,6 +18,16 @@ sample_format = "float"
 repo = "ggerganov/whisper.cpp"
 # Model filename
 filename = "ggml-base.en.bin"
+# Prompt
+# Options are `type = "none", "vocabulary", "raw"
+#  prompt = { type = "vocabulary", vocabulary = ["Google", "HuggingFace"] } 
+#     will insert  "Google, HuggingFace" as an initial prompt.
+#  prompt = { type = "raw", prompt = "HuggingFace likes Google"] } 
+#     will insert  "HuggingFace like Google" as an initial prompt.
+# For more information on whisper prompting:
+# https://cookbook.openai.com/examples/whisper_prompting_guide
+prompt = { type = "none" }
+replacements = {}
 
 [paths]
 # Cache directory for storing temporary files

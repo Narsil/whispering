@@ -54,7 +54,7 @@ impl Asr {
     /// Runs the Whisper model on the given audio file.
     ///
     /// This function takes a path to a WAV file and returns the transcribed text.
-    pub fn run(&mut self, wav_path: &Path) -> Result<String> {
+    pub fn run(&mut self, wav_path: &Path, config: &Config) -> Result<String> {
         // Take context to let it drop later.
         let (_context, mut state) = self.context.take().ok_or(anyhow!("Context was not warm"))?;
 
@@ -63,6 +63,11 @@ impl Asr {
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
+
+        // Set initial prompt if available
+        if let Some(prompt) = config.model.prompt.get_prompt_text() {
+            params.set_initial_prompt(&prompt);
+        }
 
         let mut reader = WavReader::open(wav_path)?;
         let samples: Vec<f32> = if reader.spec().sample_format == SampleFormat::Float {
@@ -84,6 +89,13 @@ impl Asr {
             text.push(' ');
         }
 
-        Ok(text.trim().to_string())
+        let mut text = text.trim().to_string();
+
+        // Apply replacements
+        for (from, to) in &config.model.replacements {
+            text = text.replace(from, to);
+        }
+
+        Ok(text)
     }
 }

@@ -153,7 +153,7 @@ impl App {
                     info!("Stopping recording...");
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
-                    let output = self.asr.run(&wav_path)?;
+                    let output = self.asr.run(&wav_path, &self.config)?;
                     if output.is_empty() {
                         // Show notification with transcribed text
                         Notification::new()

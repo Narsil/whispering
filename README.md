@@ -52,6 +52,11 @@ The application can be configured using a TOML file located at `~/.config/whispe
 ### Example Configuration
 
 ```toml
+# Whispering Configuration Example
+#
+# Copy this file to ~/.config/whispering/config.toml and modify the values as needed.
+# If no config.toml is found, the application will use default values.
+
 [audio]
 # Number of audio channels (1 for mono, 2 for stereo)
 channels = 1
@@ -67,6 +72,18 @@ sample_format = "float"
 repo = "ggerganov/whisper.cpp"
 # Model filename
 filename = "ggml-base.en.bin"
+# Prompt
+# Options are `type = "none", "vocabulary", "raw"
+#  prompt = { type = "vocabulary", vocabulary = ["Google", "HuggingFace"] } 
+#     will insert  "Google, HuggingFace" as an initial prompt.
+# 
+#  prompt = { type = "raw", prompt = "HuggingFace likes Google"] } 
+#     will insert  "HuggingFace like Google" as an initial prompt.
+# 
+# For more information on whisper prompting:
+# https://cookbook.openai.com/examples/whisper_prompting_guide
+prompt = { type = "none" }
+replacements = {}
 
 [paths]
 # Cache directory for storing temporary files
@@ -77,7 +94,7 @@ recording_path = "~/.cache/whispering/recorded.wav"
 [shortcuts]
 # Keys that need to be pressed in sequence to start recording
 # Available keys: control, alt, shift, super, space, enter, r, and many others
-keys = ["ControlLeft", "Space"]
+keys = ["ControlLeft", "Space"] 
 # Automatically hit enter after sending the text (so sends a message in usual contexts).
 autosend = false
 ```
