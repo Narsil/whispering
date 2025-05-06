@@ -166,8 +166,8 @@
                 };
                 sample_format = lib.mkOption {
                   type = lib.types.enum [
-                    "float"
-                    "int"
+                    "f32"
+                    "i16"
                   ];
                   default = "float";
                   description = "Sample format (float or int).";
@@ -238,6 +238,11 @@
                 autosend = lib.mkOption {
                   type = lib.types.bool;
                   default = false;
+                  description = "Automatically hit enter after sending the text.";
+                };
+                notify = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
                   description = "Automatically hit enter after sending the text.";
                 };
               };
