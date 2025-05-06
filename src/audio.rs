@@ -16,7 +16,7 @@ use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::config::{AudioConfig, Config, SampleFormat};
+use crate::config::{AudioConfig, Config};
 
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>;
 
@@ -65,7 +65,6 @@ impl AudioRecorder {
             sample_format: match config.sample_format {
                 crate::config::SampleFormat::F32 => hound::SampleFormat::Float,
                 crate::config::SampleFormat::I16 => hound::SampleFormat::Int,
-                _ => panic!("Unimplemented"),
             },
         }
     }
