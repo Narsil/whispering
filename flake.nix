@@ -4,7 +4,8 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { nixpkgs, rust-overlay, ... }:
+  outputs =
+    { nixpkgs, rust-overlay, ... }:
     let
       forAllSystems = nixpkgs.lib.genAttrs [
         "aarch64-linux"
@@ -77,7 +78,8 @@
         pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features wayland,cuda";
 
       # Build the package
-      buildPackage = system:
+      buildPackage =
+        system:
         let
           overlays = [ (import rust-overlay) ];
           pkgs = import nixpkgs {
@@ -87,13 +89,16 @@
           };
           pkg = pkgs.callPackage ./nix/package.nix { };
         in
-        if pkgs.stdenv.isDarwin then
-          pkg.darwin
-        else
-          pkg.linux-wayland;
+        if pkgs.stdenv.isDarwin then pkg.darwin else pkg.linux-wayland;
 
       # NixOS module
-      nixosModule = { config, lib, pkgs, ... }:
+      nixosModule =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
         let
           cfg = config.services.whispering;
           # Detect display server
@@ -184,6 +189,24 @@
                   default = "ggml-base.en.bin";
                   description = "Model filename.";
                 };
+                prompt = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.anything;
+                  default = { type = "none"; };
+                  description = "Prompt configuration for the model.";
+                  example = {
+                    type = "vocabulary";
+                    vocabulary = [ "word1" "word2" ];
+                  };
+                };
+                replacements = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.str;
+                  default = { };
+                  description = "Map of text to replace with their replacements.";
+                  example = {
+                    "incorrect text" = "correct text";
+                    "another mistake" = "another correction";
+                  };
+                };
               };
 
               # Path settings
@@ -258,7 +281,11 @@
                 group = cfg.group;
                 home = cfg.dataDir;
                 createHome = true;
-                extraGroups = [ "input" "audio" "video" ];
+                extraGroups = [
+                  "input"
+                  "audio"
+                  "video"
+                ];
               };
             };
 
@@ -270,26 +297,20 @@
             environment.etc."whispering/config.toml" = {
               source = tomlFormat.generate "whispering-config" {
                 audio = cfg.settings.audio;
-                model = cfg.settings.model;
+                model = {
+                  repo = cfg.settings.model.repo;
+                  filename = cfg.settings.model.filename;
+                  prompt = cfg.settings.model.prompt;
+                  replacements = cfg.settings.model.replacements;
+                };
                 paths = cfg.settings.paths;
                 shortcuts = cfg.settings.shortcuts;
-                vocabulary = cfg.settings.vocabulary;
-                replacements = cfg.settings.replacements;
               };
               mode = "0644";
             };
 
             # Add udev rules for input device access
-            services.udev.packages = [ (pkgs.runCommand "whispering-udev-rules" { } ''
-              mkdir -p $out/lib/udev/rules.d
-              cat > $out/lib/udev/rules.d/99-whispering.rules << EOF
-              # Allow whispering user to access /dev/uinput
-              KERNEL=="uinput", GROUP="input", MODE="0660"
-              
-              # Allow whispering user to access input devices
-              KERNEL=="event*", GROUP="input", MODE="0660"
-              EOF
-            '') ];
+            services.udev.packages = [ (pkgs.callPackage ./nix/udev.nix { inherit (cfg) group; }) ];
 
             systemd.services.whispering = {
               description = "Whispering service";
@@ -305,8 +326,6 @@
                 RestartSec = "10s";
                 # Required for CUDA and audio
                 SupplementaryGroups = [
-                  "audio"
-                  "video"
                   "input"
                 ];
                 # Display server specific environment variables

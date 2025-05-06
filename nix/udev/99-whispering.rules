@@ -1,0 +1,8 @@
+# Whispering udev rules
+# This file contains rules to allow the whispering user to access input devices
+
+# Allow whispering user to access /dev/uinput
+KERNEL=="uinput", GROUP="@group@", MODE="0660"
+
+# Allow whispering user to access input devices
+KERNEL=="event*", GROUP="@group@", MODE="0660" 
