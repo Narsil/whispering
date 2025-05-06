@@ -14,16 +14,6 @@
         "x86_64-darwin"
       ];
 
-      # Function to parse Cargo.toml
-      parseCargoToml =
-        pkgs: cargoToml:
-        let
-          manifest = builtins.fromTOML (builtins.readFile cargoToml);
-        in
-        {
-          inherit (manifest.package) name version;
-        };
-
       # Function to get system-specific build inputs
       getBuildInputs =
         pkgs: system:
@@ -283,17 +273,21 @@
           };
 
           config = lib.mkIf cfg.enable {
+            users.groups = lib.optionalAttrs (cfg.group == "whispering") {
+              whispering = { };
+            };
+
             users.users = lib.optionalAttrs (cfg.user == "whispering") {
               whispering = {
                 isSystemUser = true;
                 group = cfg.group;
                 home = cfg.dataDir;
                 createHome = true;
+                extraGroups = [
+                  "audio"
+                  "input"
+                ];
               };
-            };
-
-            users.groups = lib.optionalAttrs (cfg.group == "whispering") {
-              whispering = { };
             };
 
             # Create configuration file
@@ -324,21 +318,49 @@
               KERNEL=="event*", GROUP="${cfg.group}", MODE="0660"
             '';
 
+            # Ensure proper permissions for input devices
+            system.activationScripts.whisperingPermissions = lib.mkIf cfg.enable {
+              deps = [
+                "users"
+                "groups"
+              ];
+              text = ''
+                # Set ACL for uinput device
+                if [ -e /dev/uinput ]; then
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /dev/uinput
+                fi
+
+                # Set ACL for ALSA devices
+                if [ -e /dev/snd ]; then
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /dev/snd/*
+                fi
+              '';
+            };
+
             systemd.services.whispering = {
               description = "Whispering service";
               wantedBy = [ "multi-user.target" ];
-              after = [ "network.target" ];
+              after = [
+                "network.target"
+                "systemd-udev-settle.service"
+                "sound.target"
+              ];
+              requires = [ "sound.target" ];
               serviceConfig = {
                 Type = "simple";
                 User = cfg.user;
                 Group = cfg.group;
                 WorkingDirectory = cfg.dataDir;
+                RuntimeDirectory = "whispering";
+                RuntimeDirectoryMode = "0755";
                 ExecStart = "${cfg.package}/bin/whispering --config /etc/whispering/config.toml";
                 Restart = "on-failure";
                 RestartSec = "10s";
-                # Required for CUDA and audio
+                # Required for CUDA, audio and input devices
                 SupplementaryGroups = [
                   "${cfg.group}"
+                  "audio"
+                  "input"
                 ];
                 # Display server specific environment variables
                 Environment = displayEnv ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);

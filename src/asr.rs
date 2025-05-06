@@ -3,7 +3,7 @@
 //! This module provides functionality for downloading and running the Whisper model
 //! for speech-to-text transcription. It handles model management and audio processing.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use hf_hub::api::tokio::ApiBuilder;
 use hound::{SampleFormat, WavReader};
 use std::path::{Path, PathBuf};
@@ -45,7 +45,8 @@ impl Asr {
         let context = WhisperContext::new_with_params(
             &self.model_path.to_string_lossy(),
             WhisperContextParameters::default(),
-        )?;
+        )
+        .context(format!("Loading model at {}", self.model_path.display()))?;
         let state = context.create_state()?;
         self.context = Some((context, state));
         Ok(())
