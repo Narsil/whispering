@@ -286,6 +286,8 @@
                 extraGroups = [
                   "audio"
                   "input"
+                  "messagebus"
+                  "video"
                 ];
               };
             };
@@ -361,6 +363,8 @@
                   "${cfg.group}"
                   "audio"
                   "input"
+                  "messagebus"
+                  "video"
                 ];
                 # Display server specific environment variables
                 Environment = displayEnv ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);

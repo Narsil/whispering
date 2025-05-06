@@ -49,8 +49,9 @@ impl Asr {
             WhisperContextParameters::default(),
         )
         .context(format!("Loading model at {}", self.model_path.display()))?;
-        let state = context.create_state()?;
+        let state = context.create_state().context("Creating state")?;
         self.context = Some((context, state));
+        info!("Context loaded");
         Ok(())
     }
 
@@ -72,7 +73,7 @@ impl Asr {
             params.set_initial_prompt(&prompt);
         }
 
-        let mut reader = WavReader::open(wav_path)?;
+        let mut reader = WavReader::open(wav_path).context("Opening wav reader")?;
         let samples: Vec<f32> = if reader.spec().sample_format == SampleFormat::Float {
             reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
         } else {
@@ -82,7 +83,7 @@ impl Asr {
                 .collect()
         };
 
-        state.full(params, &samples)?;
+        state.full(params, &samples).context("Setting context")?;
 
         let num_segments = state.full_n_segments()?;
         let mut text = String::new();

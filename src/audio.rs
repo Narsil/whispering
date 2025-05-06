@@ -74,9 +74,28 @@ impl AudioRecorder {
     /// for recording, and sets up the WAV file writer.
     pub fn new(config: &Config) -> Result<Self> {
         let host = cpal::default_host();
+        info!("Available hosts: {:?}", cpal::available_hosts());
+        info!("Default host: {:?}", host.id());
 
-        let device = host
-            .default_input_device()
+        let devices = host.input_devices()?;
+        // info!("Available input devices:");
+        // for device in devices.iter() {
+        //     if let Ok(name) = device.name() {
+        //         info!("  - {}", name);
+        //     }
+        // }
+
+        // Try to find the C920 device first
+        let device = devices
+            .filter(|d| {
+                if let Ok(name) = d.name() {
+                    name.contains("C920")
+                } else {
+                    false
+                }
+            })
+            .next()
+            .or_else(|| host.default_input_device())
             .ok_or_else(|| anyhow!("Cannot find input device"))?;
 
         info!("Using input device: {}", device.name()?);

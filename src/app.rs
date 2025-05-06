@@ -142,7 +142,8 @@ impl App {
                         .summary("Recording...")
                         .body("Recording started")
                         .icon("audio-input-microphone")
-                        .show()?;
+                        .show()
+                        .context("Notification cannot be shown")?;
                 }
             }
             EventType::KeyRelease(key) => {
