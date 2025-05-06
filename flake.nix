@@ -73,10 +73,6 @@
             LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib";
           };
 
-      # Function to get system-specific cargo features
-      getCargoFeatures =
-        pkgs: system: if pkgs.stdenv.isDarwin then "--features metal" else "--features wayland,cuda";
-
       # Build the package
       buildPackage =
         system:
@@ -89,7 +85,7 @@
           };
           pkg = pkgs.callPackage ./nix/package.nix { };
         in
-        if pkgs.stdenv.isDarwin then pkg.darwin else pkg.linux-wayland;
+        pkg;
 
       # NixOS module
       nixosModule =
@@ -101,9 +97,12 @@
         }:
         let
           cfg = config.services.whispering;
+          usingWayland = config.programs.sway.enable or false || config.programs.hyprland.enable or false;
+          usingX11 = config.services.xserver.enable or false;
           # Detect display server
-          isWayland = true;
+          isWayland = usingWayland;
           # Get display server specific environment variables
+          pkg = (buildPackage pkgs.system);
           displayEnv =
             if isWayland then
               [
@@ -115,18 +114,22 @@
                 "DISPLAY=:0"
                 "XAUTHORITY=/home/${cfg.user}/.Xauthority"
               ];
-          # Get display server specific cargo features
-          displayFeatures = if isWayland then "wayland" else "x11";
           # Create TOML format
           tomlFormat = pkgs.formats.toml { };
         in
         {
+          # assertions = [
+          #   {
+          #     assertion = usingWayland || usingX11;
+          #     message = "Either Wayland or X11 must be enabled.";
+          #   }
+          # ];
           options.services.whispering = {
             enable = lib.mkEnableOption "Whispering service";
 
             package = lib.mkOption {
               type = lib.types.package;
-              default = buildPackage pkgs.system;
+              default = if usingX11 then pkg.linux-x11 else pkg.default;
               description = "The Whispering package to use.";
             };
 
@@ -347,8 +350,10 @@
     in
     {
       packages = forAllSystems (system: {
-        default = buildPackage system;
-        whispering = buildPackage system;
+        default = (buildPackage system).default;
+        darwin = (buildPackage system).darwin;
+        linux-wayland = (buildPackage system).linux-wayland;
+        linux-x11 = (buildPackage system).linux-x11;
       });
 
       devShells = forAllSystems (

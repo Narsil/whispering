@@ -20,6 +20,27 @@
 }:
 
 let
+filteredSrc = lib.cleanSourceWith {
+          src = ../.;
+          filter = path: type:
+            let
+              rel = builtins.baseNameOf path;
+              dir = builtins.dirOf path;
+              # Keep essential Rust project files and directories
+            in
+              (rel == "Cargo.toml") ||
+              (rel == "config.example.toml") ||
+              (rel == "Cargo.lock") ||
+              (rel == "rust-toolchain.toml") ||
+              (rel == "rust-toolchain") ||
+              (lib.hasPrefix (toString ../src) path) ||
+              (lib.hasPrefix (toString ../benches) path) ||
+              (lib.hasPrefix (toString ../examples) path) ||
+              (lib.hasPrefix (toString ../tests) path) ||
+              (lib.hasPrefix (toString ../build.rs) path) ||
+              (rel == "README.md") ||
+              (rel == "LICENSE");
+};
   # Common build inputs for all platforms
   commonBuildInputs = [
     llvmPackages.libclang
@@ -61,7 +82,7 @@ let
     rustPlatform.buildRustPackage.override { inherit stdenv; } rec {
       pname = "whispering";
       version = "0.1.0";
-      src = ../.;
+      src = filteredSrc;
 
       cargoLock = {
         lockFile = ../Cargo.lock;
@@ -81,6 +102,9 @@ let
 
 in
 {
+  # Default package based on platform
+  default = if stdenv.isDarwin then darwin else linux-wayland;
+
   # Darwin variant with Metal support
   darwin = mkWhispering {
     features = [ "metal" ];
