@@ -39,12 +39,12 @@ pub fn paste(output: String) -> Result<()> {
             opts.copy(
                 Source::Bytes(output.into_bytes().into()),
                 MimeType::Autodetect,
-            );
+            )?;
         }
         #[cfg(feature = "x11")]
         {
-            let mut clipboard = arboard::Clipboard::new().context("arboard clipboard")?;
-            clipboard.set_text(output).context("arboard clipboard")?;
+            let mut clipboard = arboard::Clipboard::new()?;
+            clipboard.set_text(output)?;
         }
         #[cfg(not(any(feature = "x11", feature = "wayland")))]
         {
@@ -52,7 +52,7 @@ pub fn paste(output: String) -> Result<()> {
         }
         debug!("Clipboard set");
         std::thread::sleep(Duration::from_millis(5));
-        simulate(&EventType::KeyPress(Key::ControlLeft)).context("While simulating")?;
+        simulate(&EventType::KeyPress(Key::ControlLeft))?;
         debug!("Event ok");
         simulate(&EventType::KeyPress(Key::ShiftLeft))?;
         simulate(&EventType::KeyPress(Key::KeyV))?;
