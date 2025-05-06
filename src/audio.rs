@@ -113,30 +113,35 @@ impl AudioRecorder {
             let mut stream_config = None;
 
             for config_range in supported_configs {
-                if config_range.channels() == config.audio.channels {
-                    let sample_rate = cpal::SampleRate(config.audio.sample_rate);
-                    if config_range.min_sample_rate() <= sample_rate
-                        && config_range.max_sample_rate() >= sample_rate
-                        && config_range.sample_format() == config.audio.sample_format.into()
-                    {
-                        stream_config = Some(config_range.with_sample_rate(sample_rate));
-                        break;
-                    }
+                let sample_rate = cpal::SampleRate(config.audio.sample_rate);
+                if config_range.min_sample_rate() <= sample_rate
+                    && config_range.max_sample_rate() >= sample_rate
+                    && config_range.sample_format() == config.audio.sample_format.into()
+                {
+                    stream_config = Some(config_range.with_sample_rate(sample_rate));
+                    break;
                 }
             }
             stream_config
         } else {
+            None
+        };
+        let stream_config = if let Some(stream_config) = stream_config {
+            Some(stream_config)
+        } else {
+            debug!("Could not find supported configs");
             if let Ok(default_config) = device.default_input_config() {
                 debug!("Device default config: {:?}", default_config);
-                warn!("Could not find exact match for requested config, using device default");
                 Some(default_config.into())
             } else {
+                warn!("Could not default_config");
                 None
             }
         };
 
         // If we can't find an exact match, use the default config
         let stream_config = stream_config.unwrap_or_else(|| {
+            warn!("Falling back to config defined configuration, It might not work");
             SupportedStreamConfig::new(
                 config.audio.channels,
                 cpal::SampleRate(config.audio.sample_rate),

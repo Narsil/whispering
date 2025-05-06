@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::{debug, info};
 use rdev::{EventType, Key, simulate};
 
@@ -16,6 +16,7 @@ use rdev::{EventType, Key, simulate};
 /// characters and special characters that require the shift key.
 pub fn paste(output: String) -> Result<()> {
     info!("Simulating keyboard input: {}", output);
+    debug!("Getting clipboard");
     #[cfg(target_os = "macos")]
     {
         let mut clipboard = arboard::Clipboard::new()?;
@@ -31,7 +32,6 @@ pub fn paste(output: String) -> Result<()> {
     }
     #[cfg(target_os = "linux")]
     {
-        debug!("Getting clipboard");
         #[cfg(feature = "wayland")]
         {
             use wl_clipboard_rs::copy::{MimeType, Options, Source};
@@ -39,8 +39,7 @@ pub fn paste(output: String) -> Result<()> {
             opts.copy(
                 Source::Bytes(output.into_bytes().into()),
                 MimeType::Autodetect,
-            )
-            .context("Setting clipboard")?;
+            );
         }
         #[cfg(feature = "x11")]
         {

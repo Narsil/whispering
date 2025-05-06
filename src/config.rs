@@ -14,6 +14,7 @@ use std::{
 /// Audio recording configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(deny_unknown_fields)]
 pub struct AudioConfig {
     /// Number of audio channels (1 for mono, 2 for stereo)
     pub channels: u16,
@@ -69,6 +70,7 @@ impl Default for AudioConfig {
 /// Path configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(deny_unknown_fields)]
 pub struct PathConfig {
     /// Cache directory for storing temporary files
     pub cache_dir: PathBuf,
@@ -79,6 +81,7 @@ pub struct PathConfig {
 /// Main application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Audio recording settings
     pub audio: AudioConfig,
@@ -112,6 +115,7 @@ impl Default for PromptType {
 /// Whisper model configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     /// Model repository on Hugging Face
     pub repo: String,
@@ -126,6 +130,7 @@ pub struct ModelConfig {
 /// Keyboard shortcut configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
+#[serde(deny_unknown_fields)]
 pub struct ShortcutConfig {
     /// Keys that need to be pressed in sequence
     pub keys: HashSet<Key>,
