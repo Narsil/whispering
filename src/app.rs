@@ -115,6 +115,20 @@ impl App {
         Ok(())
     }
 
+    fn notify(&self, summary: &str, content: &str) {
+        // Show desktop notification
+        if self.config.shortcuts.notify {
+            if let Err(err) = Notification::new()
+                .summary(summary)
+                .body(content)
+                .icon("audio-input-microphone")
+                .show()
+            {
+                error!("Cannot show notification: {err} , content was : {summary} {content}")
+            };
+        }
+    }
+
     /// Handles keyboard events.
     ///
     /// This function processes keyboard events and updates the application state
@@ -134,16 +148,6 @@ impl App {
                     info!("Starting recording...");
                     self.recorder.start_recording()?;
                     self.asr.load()?;
-
-                    // Show desktop notification
-                    if self.config.shortcuts.notify {
-                        Notification::new()
-                            .summary("Recording...")
-                            .body("Recording started")
-                            .icon("audio-input-microphone")
-                            .show()
-                            .context("Notification cannot be shown")?;
-                    }
                 }
             }
             EventType::KeyRelease(key) => {
@@ -161,14 +165,7 @@ impl App {
                         .context("Error running ASR")?;
                     if output.is_empty() {
                         // Show notification with transcribed text
-                        if self.config.shortcuts.notify {
-                            Notification::new()
-                                .summary("No voice detected")
-                                .body(&output)
-                                .icon("audio-input-microphone")
-                                .show()
-                                .context("Cannot show notification")?;
-                        }
+                        self.notify("No voice detected", &output);
                         return Ok(());
                     }
 
@@ -181,12 +178,7 @@ impl App {
                     };
                     // Show notification with transcribed text
                     if self.config.shortcuts.notify {
-                        Notification::new()
-                            .summary(summary)
-                            .body(&output)
-                            .icon("audio-input-microphone")
-                            .show()
-                            .context("Cannot show notification")?;
+                        self.notify(summary, &output)
                     }
 
                     paste(output).context("Pasting")?;

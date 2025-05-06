@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
 use hound::{WavSpec, WavWriter};
-use log::{error, info};
+use log::{debug, error, info, warn};
 use rubato::{FftFixedInOut, Resampler};
 use std::collections::HashSet;
 use std::fs::File;
@@ -75,12 +75,12 @@ impl AudioRecorder {
     /// for recording, and sets up the WAV file writer.
     pub fn new(config: &Config) -> Result<Self> {
         let host = cpal::default_host();
-        info!("Available hosts: {:?}", cpal::available_hosts());
-        info!("Default host: {:?}", host.id());
+        debug!("Available hosts: {:?}", cpal::available_hosts());
+        debug!("Default host: {:?}", host.id());
 
         let devices = host.input_devices()?;
         let names: HashSet<_> = devices.into_iter().flat_map(|d| d.name()).collect();
-        info!("Available input devices: {names:?}");
+        debug!("Available input devices: {names:?}");
 
         let devices = host.input_devices()?;
         // Find the requested device or use default
@@ -113,7 +113,7 @@ impl AudioRecorder {
             .default_input_config()
             .context("Failed to get default config")?;
 
-        info!("Device default config: {:?}", default_config);
+        debug!("Device default config: {:?}", default_config);
 
         // Try to find a supported configuration that matches what we want
         let supported_configs = device
@@ -136,11 +136,11 @@ impl AudioRecorder {
 
         // If we can't find an exact match, use the default config
         let stream_config = stream_config.unwrap_or_else(|| {
-            info!("Could not find exact match for requested config, using device default");
+            warn!("Could not find exact match for requested config, using device default");
             default_config.clone()
         });
 
-        info!("Using stream config: {:?}", stream_config);
+        debug!("Using stream config: {:?}", stream_config);
 
         // Create cache directory if it doesn't exist
         std::fs::create_dir_all(&config.paths.cache_dir).context("Creating cache directory")?;

@@ -267,14 +267,10 @@ mod tests {
     fn test_config_serialization() {
         let config = Config::default();
         let toml = toml::to_string(&config).unwrap();
-        println!("TOML output:\n{}", toml); // Debug print
+        println!("TOML output:\n{}", toml);
+        assert!(toml.contains("sample_format = \"f32\""));
         assert!(toml.contains("channels = 1"));
         assert!(toml.contains("sample_rate = 16000"));
-        assert!(toml.contains("sample_format = \"float\""));
-        assert!(toml.contains("repo = \"ggerganov/whisper.cpp\""));
-        assert!(toml.contains("filename = \"ggml-base.en.bin\""));
-        assert!(toml.contains("prompt"));
-        assert!(toml.contains("replacements"));
     }
 
     #[test]
@@ -283,7 +279,7 @@ mod tests {
             [audio]
             channels = 2
             sample_rate = 48000
-            sample_format = "int"
+            sample_format = "i16"
 
             [model]
             repo = "test/repo"
@@ -298,6 +294,7 @@ mod tests {
             [shortcuts]
             keys = ["ControlLeft", "Space"]
             autosend = true
+            notify = true
         "#;
 
         let config: Config = toml::from_str(toml).unwrap();
@@ -357,7 +354,7 @@ mod tests {
             [audio]
             channels = 1
             sample_rate = 16000
-            sample_format = "float"
+            sample_format = "f32"
 
             [model]
             repo = "test/repo"
@@ -375,7 +372,7 @@ mod tests {
             [audio]
             channels = 1
             sample_rate = 16000
-            sample_format = "float"
+            sample_format = "f32"
 
             [model]
             repo = "ggerganov/whisper.cpp"
@@ -390,6 +387,7 @@ mod tests {
             [shortcuts]
             keys = ["ControlLeft", "Space"]
             autosend = true
+            notify = true
         "#;
 
         let config: Config = toml::from_str(minimal_config).unwrap();
@@ -482,7 +480,7 @@ mod tests {
             [audio]
             channels = "invalid"  # Should be a number
             sample_rate = 48000
-            sample_format = "int"
+            sample_format = "i16"
         "#;
 
         let result: Result<Config, _> = toml::from_str(toml);

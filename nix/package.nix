@@ -17,6 +17,8 @@
   wayland-scanner,
   xorg,
   cudaPackages,
+  libnotify,
+  dbus,
 }:
 
 let
@@ -146,6 +148,8 @@ rec {
       wayland
       wayland-protocols
       wayland-scanner
+      libnotify
+      dbus
     ] ++ cudaConfig.buildInputs;
     extraEnvVars = cudaConfig.envVars;
     cmakeArgs = cudaConfig.cmakeArgs;
@@ -168,6 +172,8 @@ rec {
       xorg.libXrandr
       xorg.libXi
       xorg.libXtst
+      libnotify
+      dbus
     ] ++ cudaConfig.buildInputs;
     extraEnvVars = cudaConfig.envVars;
     cmakeArgs = cudaConfig.cmakeArgs;

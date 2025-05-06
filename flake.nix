@@ -73,7 +73,9 @@
             config.allowUnfree = !pkgs.stdenv.isDarwin;
             config.cudaSupport = !pkgs.stdenv.isDarwin;
           };
-          pkg = pkgs.callPackage ./nix/package.nix { };
+          pkg = pkgs.callPackage ./nix/package.nix {
+            inherit (pkgs) libnotify dbus;
+          };
         in
         pkg;
 
