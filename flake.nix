@@ -320,7 +320,7 @@
               KERNEL=="event*", GROUP="${cfg.group}", MODE="0660"
             '';
 
-            # Ensure proper permissions for input devices
+            # Ensure proper permissions for input devices and clipboard
             system.activationScripts.whisperingPermissions = lib.mkIf cfg.enable {
               deps = [
                 "users"
@@ -335,6 +335,17 @@
                 # Set ACL for ALSA devices
                 if [ -e /dev/snd ]; then
                   ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /dev/snd/*
+                fi
+
+                # Set ACL for clipboard access
+                if [ -e /run/user/1000/wayland-0 ]; then
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /run/user/1000/wayland-0
+                fi
+                if [ -e /run/user/1000/wayland-1 ]; then
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /run/user/1000/wayland-1
+                fi
+                if [ -e /run/user/1000/wayland-2 ]; then
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /run/user/1000/wayland-2
                 fi
               '';
             };
