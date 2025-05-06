@@ -8,10 +8,8 @@
 channels = 1
 # Sample rate in Hz
 sample_rate = 16000
-# Bits per sample
-bits_per_sample = 32
 # Sample format (float or int)
-sample_format = "float"
+sample_format = "f32"
 
 [model]
 # Hugging Face model repository

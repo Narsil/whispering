@@ -41,10 +41,8 @@ impl From<SampleFormat> for cpal::SampleFormat {
 #[serde(rename_all = "lowercase")]
 pub enum SampleFormat {
     /// 32-bit floating point samples
-    #[serde(rename = "float")]
     F32,
     /// 16-bit integer samples
-    #[serde(rename = "int")]
     I16,
 }
 
