@@ -310,7 +310,23 @@
             };
 
             # Add udev rules for input device access
-            services.udev.packages = [ (pkgs.callPackage ./nix/udev.nix { inherit (cfg) group; }) ];
+            services.udev.extraRules = ''
+              # Whispering udev rules
+              # This file contains rules to allow the whispering user to access input devices
+
+              # Allow whispering user to access /dev/uinput
+              KERNEL=="uinput", GROUP="${cfg.group}", MODE="0660"
+
+              # Allow whispering user to access input devices
+              KERNEL=="event*", GROUP="${cfg.group}", MODE="0660"
+            '';
+
+            systemd.services.reload-udev = {
+              description = "Reload udev rules";
+              wantedBy = [ "multi-user.target" ];
+              after = [ "systemd-udevd.service" ];
+              serviceConfig.ExecStart = "${pkgs.udev}/bin/udevadm control --reload-rules && ${pkgs.udev}/bin/udevadm trigger";
+            };
 
             systemd.services.whispering = {
               description = "Whispering service";

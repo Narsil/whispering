@@ -47,14 +47,13 @@ impl App {
     /// 1. Loading configuration from config.toml or using defaults
     /// 2. Setting up the audio recorder
     /// 3. Loading the Whisper model
-    pub async fn new() -> Result<Self> {
+    pub async fn new(config_path: Option<PathBuf>) -> Result<Self> {
         // Load configuration
-        let mut config_file = dirs::config_dir()
-            .context("Cannot find config directory")
-            .unwrap_or_else(|_| PathBuf::from("~/.config"));
-        config_file.push("whispering");
-        config_file.push("config.toml");
-        let config = Config::load()?;
+        let config = if let Some(path) = config_path {
+            Config::from_file(&path).context(format!("Reading config {}", path.display()))?
+        } else {
+            Config::load_or_write_default(None)?
+        };
 
         // Warm the handle.
         simulate(&EventType::KeyPress(Key::ControlLeft))?;

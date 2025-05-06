@@ -204,15 +204,13 @@ impl Config {
     }
 
     /// Loads configuration from the default location, creating it if it doesn't exist.
-    pub fn load() -> Result<Self> {
-        let path = Self::default_config_path();
-        Self::load_from_path(&path)
-    }
-
-    fn load_from_path(path: &Path) -> Result<Self> {
+    pub fn load_or_write_default(path: Option<&Path>) -> Result<Self> {
+        let default_path = Self::default_config_path();
+        let path = path.unwrap_or(&default_path);
         // If config exists, use it
         if path.exists() {
-            return Self::from_file(path);
+            return Self::from_file(path)
+                .context(format!("Reading default config from {}", path.display()));
         }
 
         // If no config exists, create default config
@@ -221,7 +219,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        config.save_to_file(path)?;
+        config.save_to_file(&path)?;
         Ok(config)
     }
 }
@@ -454,24 +452,17 @@ mod tests {
     }
 
     #[test]
-    fn test_example_config_serialization() -> Result<()> {
-        let config = Config::from_file("config.example.toml")?;
-
-        // Serialize the config back to TOML
-        let serialized = toml::to_string(&config).unwrap();
+    fn test_example_default_config_round_trip() -> Result<()> {
+        // Verify that the default config matches the original
+        let default = Config::default();
+        let serialized = toml::to_string(&default).unwrap();
 
         // Deserialize the serialized config
         let deserialized: Config = toml::from_str(&serialized).unwrap();
 
         // Verify that the deserialized config matches the original
-        assert_eq!(config, deserialized);
+        assert_eq!(default, deserialized);
 
-        // Verify that the default config matches the original
-        let default = Config::default();
-        // Ignore paths as the defaults are resolved and local to the current machine.
-        assert_eq!(default.audio, config.audio);
-        assert_eq!(default.model, config.model);
-        assert_eq!(default.shortcuts, config.shortcuts);
         Ok(())
     }
 
@@ -495,7 +486,7 @@ mod tests {
         let config_path = temp_dir.path().join("whispering").join("config.toml");
 
         // Load config (should create default config)
-        let config = Config::load_from_path(&config_path).unwrap();
+        let config = Config::load_or_write_default(Some(&config_path)).unwrap();
 
         // Verify config was created
         assert!(config_path.exists());

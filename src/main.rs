@@ -31,6 +31,8 @@
 #![deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
+use clap::Parser;
+use std::path::PathBuf;
 use whisper_rs::install_logging_hooks;
 
 mod app;
@@ -40,18 +42,30 @@ mod config;
 mod keyboard;
 mod logging;
 
+/// Command line arguments for the Whispering application
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the configuration file
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+}
+
 /// Main entry point for the Whispering application.
 ///
 /// Initializes logging with a default "info" level (can be overridden via RUST_LOG environment variable),
 /// sets up the application, and runs the main event loop.
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Parse command line arguments
+    let args = Args::parse();
+
     // Initialize logging
     install_logging_hooks();
     logging::init_logging();
 
     // Create and run the application
-    let mut app = app::App::new().await?;
+    let mut app = app::App::new(args.config).await?;
     app.run().await?;
 
     Ok(())
