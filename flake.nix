@@ -158,11 +158,6 @@
                   default = 16000;
                   description = "Sample rate in Hz.";
                 };
-                bits_per_sample = lib.mkOption {
-                  type = lib.types.ints.u16;
-                  default = 32;
-                  description = "Bits per sample.";
-                };
                 sample_format = lib.mkOption {
                   type = lib.types.enum [
                     "f32"
