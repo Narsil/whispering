@@ -73,9 +73,19 @@
             config.allowUnfree = !pkgs.stdenv.isDarwin;
             config.cudaSupport = !pkgs.stdenv.isDarwin;
           };
-          pkg = pkgs.callPackage ./nix/package.nix {
-            inherit (pkgs) libnotify dbus;
-          };
+          darwinInputs =
+            if pkgs.stdenv.isDarwin then
+              {
+                inherit (pkgs) darwin;
+              }
+            else
+              { };
+          pkg = pkgs.callPackage ./nix/package.nix (
+            {
+              inherit (pkgs) libnotify dbus libiconv;
+            }
+            // darwinInputs
+          );
         in
         pkg;
 
@@ -380,7 +390,7 @@
     {
       packages = forAllSystems (system: {
         default = (buildPackage system).default;
-        darwin = (buildPackage system).darwin;
+        whisper-darwin = (buildPackage system).whisper-darwin;
         linux-wayland = (buildPackage system).linux-wayland;
         linux-x11 = (buildPackage system).linux-x11;
       });
