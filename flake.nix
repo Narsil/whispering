@@ -100,11 +100,13 @@
               [
                 "XDG_RUNTIME_DIR=/run/user/1000"
                 "WAYLAND_DISPLAY=wayland-0"
+                "LD_LIBRARY_PATH=/run/opengl-driver/lib"
               ]
             else
               [
                 "DISPLAY=:0"
                 "XAUTHORITY=/home/${cfg.user}/.Xauthority"
+                "LD_LIBRARY_PATH=/run/opengl-driver/lib"
               ];
           # Create TOML format
           tomlFormat = pkgs.formats.toml { };

@@ -6,7 +6,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample};
+use cpal::{FromSample, Sample, SupportedStreamConfig};
 use hound::{WavSpec, WavWriter};
 use log::{debug, error, info, warn};
 use rubato::{FftFixedInOut, Resampler};
@@ -108,36 +108,41 @@ impl AudioRecorder {
 
         info!("Using input device: {}", device.name()?);
 
-        // Get device's default config
-        let default_config = device
-            .default_input_config()
-            .context("Failed to get default config")?;
-
-        debug!("Device default config: {:?}", default_config);
-
         // Try to find a supported configuration that matches what we want
-        let supported_configs = device
-            .supported_input_configs()
-            .context("Failed to get supported configs")?;
+        let stream_config = if let Ok(supported_configs) = device.supported_input_configs() {
+            let mut stream_config = None;
 
-        let mut stream_config = None;
-        for config_range in supported_configs {
-            if config_range.channels() == config.audio.channels {
-                let sample_rate = cpal::SampleRate(config.audio.sample_rate);
-                if config_range.min_sample_rate() <= sample_rate
-                    && config_range.max_sample_rate() >= sample_rate
-                    && config_range.sample_format() == config.audio.sample_format.into()
-                {
-                    stream_config = Some(config_range.with_sample_rate(sample_rate));
-                    break;
+            for config_range in supported_configs {
+                if config_range.channels() == config.audio.channels {
+                    let sample_rate = cpal::SampleRate(config.audio.sample_rate);
+                    if config_range.min_sample_rate() <= sample_rate
+                        && config_range.max_sample_rate() >= sample_rate
+                        && config_range.sample_format() == config.audio.sample_format.into()
+                    {
+                        stream_config = Some(config_range.with_sample_rate(sample_rate));
+                        break;
+                    }
                 }
             }
-        }
+            stream_config
+        } else {
+            if let Ok(default_config) = device.default_input_config() {
+                debug!("Device default config: {:?}", default_config);
+                warn!("Could not find exact match for requested config, using device default");
+                Some(default_config.into())
+            } else {
+                None
+            }
+        };
 
         // If we can't find an exact match, use the default config
         let stream_config = stream_config.unwrap_or_else(|| {
-            warn!("Could not find exact match for requested config, using device default");
-            default_config.clone()
+            SupportedStreamConfig::new(
+                config.audio.channels,
+                cpal::SampleRate(config.audio.sample_rate),
+                cpal::SupportedBufferSize::Unknown,
+                config.audio.sample_format.into(),
+            )
         });
 
         debug!("Using stream config: {:?}", stream_config);
