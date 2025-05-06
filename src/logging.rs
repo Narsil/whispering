@@ -1,9 +1,9 @@
 use env_logger::Builder;
 use log::{LevelFilter, info};
-use whisper_rs::install_logging_hooks;
+// use whisper_rs::install_logging_hooks;
 
 pub fn init_logging() {
-    install_logging_hooks();
+    // install_logging_hooks();
     Builder::from_default_env()
         .filter_level(LevelFilter::Off)
         .filter_module("whispering", LevelFilter::Debug)

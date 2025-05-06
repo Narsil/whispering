@@ -44,8 +44,8 @@ pub fn paste(output: String) -> Result<()> {
         }
         #[cfg(feature = "x11")]
         {
-            let mut clipboard = arboard::Clipboard::new()?;
-            clipboard.set_text(output)?;
+            let mut clipboard = arboard::Clipboard::new().context("arboard clipboard")?;
+            clipboard.set_text(output).context("arboard clipboard")?;
         }
         #[cfg(not(any(feature = "x11", feature = "wayland")))]
         {

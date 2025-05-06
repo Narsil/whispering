@@ -99,7 +99,7 @@
             if isWayland then
               [
                 "XDG_RUNTIME_DIR=/run/user/1000"
-                "WAYLAND_DISPLAY=wayland-0"
+                "WAYLAND_DISPLAY=wayland-1"
                 "LD_LIBRARY_PATH=/run/opengl-driver/lib"
               ]
             else
@@ -341,15 +341,12 @@
                   ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /dev/snd/*
                 fi
 
-                # Set ACL for clipboard access
-                if [ -e /run/user/1000/wayland-0 ]; then
-                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /run/user/1000/wayland-0
+                # Set ACL for Wayland socket and runtime directory
+                if [ -e /run/user/1000 ]; then
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:r-x /run/user/1000
                 fi
                 if [ -e /run/user/1000/wayland-1 ]; then
-                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /run/user/1000/wayland-1
-                fi
-                if [ -e /run/user/1000/wayland-2 ]; then
-                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /run/user/1000/wayland-2
+                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rwx /run/user/1000/wayland-1
                 fi
               '';
             };
