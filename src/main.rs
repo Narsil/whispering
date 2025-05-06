@@ -33,7 +33,6 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
-use whisper_rs::install_logging_hooks;
 
 mod app;
 mod asr;
@@ -61,7 +60,6 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize logging
-    install_logging_hooks();
     logging::init_logging();
 
     // Create and run the application

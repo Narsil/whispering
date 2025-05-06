@@ -6,7 +6,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, StreamConfig};
+use cpal::{FromSample, Sample};
 use hound::{WavSpec, WavWriter};
 use log::{error, info};
 use rubato::{FftFixedInOut, Resampler};
@@ -81,16 +81,6 @@ impl AudioRecorder {
         let devices = host.input_devices()?;
         let names: HashSet<_> = devices.into_iter().flat_map(|d| d.name()).collect();
         info!("Available input devices: {names:?}");
-        // for device in devices {
-        //     if let Ok(name) = device.name() {
-        //         info!("  - {}", name);
-        //         if let Ok(supported_configs) = device.supported_input_configs() {
-        //             for config in supported_configs {
-        //                 info!("    Supported config: {:?}", config);
-        //             }
-        //         }
-        //     }
-        // }
 
         let devices = host.input_devices()?;
         // Find the requested device or use default
@@ -125,8 +115,32 @@ impl AudioRecorder {
 
         info!("Device default config: {:?}", default_config);
 
-        // Create stream config based on device capabilities
-        let stream_config: StreamConfig = default_config.clone().into();
+        // Try to find a supported configuration that matches what we want
+        let supported_configs = device
+            .supported_input_configs()
+            .context("Failed to get supported configs")?;
+
+        let mut stream_config = None;
+        for config_range in supported_configs {
+            if config_range.channels() == config.audio.channels {
+                let sample_rate = cpal::SampleRate(config.audio.sample_rate);
+                if config_range.min_sample_rate() <= sample_rate
+                    && config_range.max_sample_rate() >= sample_rate
+                    && config_range.sample_format() == config.audio.sample_format.into()
+                {
+                    stream_config = Some(config_range.with_sample_rate(sample_rate));
+                    break;
+                }
+            }
+        }
+
+        // If we can't find an exact match, use the default config
+        let stream_config = stream_config.unwrap_or_else(|| {
+            info!("Could not find exact match for requested config, using device default");
+            default_config.clone()
+        });
+
+        info!("Using stream config: {:?}", stream_config);
 
         // Create cache directory if it doesn't exist
         std::fs::create_dir_all(&config.paths.cache_dir).context("Creating cache directory")?;
@@ -144,17 +158,17 @@ impl AudioRecorder {
         };
 
         // Create resampler if needed
-        let resampler = if default_config.sample_rate().0 != config.audio.sample_rate
-            || default_config.sample_format() != cpal::SampleFormat::F32
-            || default_config.channels() != config.audio.channels
+        let resampler = if stream_config.sample_rate().0 != config.audio.sample_rate
+            || stream_config.channels() != config.audio.channels
+            || stream_config.sample_format() != cpal::SampleFormat::F32
         {
-            if default_config.sample_format() != cpal::SampleFormat::F32 {
+            if stream_config.sample_format() != cpal::SampleFormat::F32 {
                 todo!("Unimplemented resampling samples");
             }
             Some(Resample {
-                samplerate_in: default_config.sample_rate().0,
+                samplerate_in: stream_config.sample_rate().0,
                 samplerate_out: 16000,
-                in_channels: default_config.channels(),
+                in_channels: stream_config.channels(),
             })
         } else {
             None
@@ -162,7 +176,7 @@ impl AudioRecorder {
 
         let stream = device
             .build_input_stream(
-                &stream_config,
+                &stream_config.into(),
                 move |data, _: &_| {
                     Self::write_input_data_sample::<f32, f32>(data, &writer2, resampler);
                 },

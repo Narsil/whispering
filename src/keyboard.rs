@@ -5,8 +5,8 @@
 
 use std::time::Duration;
 
-use anyhow::Result;
-use log::info;
+use anyhow::{Context, Result};
+use log::{debug, info};
 use rdev::{EventType, Key, simulate};
 
 /// Simulates typing the given text by generating keyboard events.
@@ -31,6 +31,7 @@ pub fn paste(output: String) -> Result<()> {
     }
     #[cfg(target_os = "linux")]
     {
+        debug!("Getting clipboard");
         #[cfg(feature = "wayland")]
         {
             use wl_clipboard_rs::copy::{MimeType, Options, Source};
@@ -38,7 +39,8 @@ pub fn paste(output: String) -> Result<()> {
             opts.copy(
                 Source::Bytes(output.into_bytes().into()),
                 MimeType::Autodetect,
-            )?;
+            )
+            .context("Setting clipboard")?;
         }
         #[cfg(feature = "x11")]
         {
@@ -49,13 +51,16 @@ pub fn paste(output: String) -> Result<()> {
         {
             compile_error!("Wayland or x11 must be active");
         }
+        debug!("Clipboard set");
         std::thread::sleep(Duration::from_millis(5));
-        simulate(&EventType::KeyPress(Key::ControlLeft))?;
+        simulate(&EventType::KeyPress(Key::ControlLeft)).context("While simulating")?;
+        debug!("Event ok");
         simulate(&EventType::KeyPress(Key::ShiftLeft))?;
         simulate(&EventType::KeyPress(Key::KeyV))?;
         simulate(&EventType::KeyRelease(Key::KeyV))?;
         simulate(&EventType::KeyRelease(Key::ShiftLeft))?;
         simulate(&EventType::KeyRelease(Key::ControlLeft))?;
+        debug!("Events simulated");
     }
     #[cfg(target_os = "windows")]
     {

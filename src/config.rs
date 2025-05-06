@@ -131,6 +131,8 @@ pub struct ShortcutConfig {
     pub keys: HashSet<Key>,
     /// Automatically hit enter after sending the text (so sends a message in usual contexts).
     pub autosend: bool,
+    /// Displays a notification about the capturing
+    pub notify: bool,
 }
 
 impl Default for ShortcutConfig {
@@ -138,6 +140,7 @@ impl Default for ShortcutConfig {
         Self {
             keys: HashSet::from([Key::ControlLeft, Key::Space]),
             autosend: false,
+            notify: true,
         }
     }
 }

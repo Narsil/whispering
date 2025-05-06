@@ -11,7 +11,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
-use whisper_rs::install_logging_hooks;
 
 use crate::asr::{Asr, download_model};
 use crate::audio::AudioRecorder;
@@ -67,7 +66,6 @@ impl App {
         std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Download model if it doesn't exist
-        install_logging_hooks();
         let model_path = download_model(&config)
             .await
             .context("Failed to download model")?;
@@ -138,12 +136,14 @@ impl App {
                     self.asr.load()?;
 
                     // Show desktop notification
-                    Notification::new()
-                        .summary("Recording...")
-                        .body("Recording started")
-                        .icon("audio-input-microphone")
-                        .show()
-                        .context("Notification cannot be shown")?;
+                    if self.config.shortcuts.notify {
+                        Notification::new()
+                            .summary("Recording...")
+                            .body("Recording started")
+                            .icon("audio-input-microphone")
+                            .show()
+                            .context("Notification cannot be shown")?;
+                    }
                 }
             }
             EventType::KeyRelease(key) => {
@@ -155,14 +155,20 @@ impl App {
                     info!("Stopping recording...");
                     let wav_path = self.recorder.stop_recording()?;
                     info!("Transcribing audio...");
-                    let output = self.asr.run(&wav_path, &self.config)?;
+                    let output = self
+                        .asr
+                        .run(&wav_path, &self.config)
+                        .context("Error running ASR")?;
                     if output.is_empty() {
                         // Show notification with transcribed text
-                        Notification::new()
-                            .summary("No voice detected")
-                            .body(&output)
-                            .icon("audio-input-microphone")
-                            .show()?;
+                        if self.config.shortcuts.notify {
+                            Notification::new()
+                                .summary("No voice detected")
+                                .body(&output)
+                                .icon("audio-input-microphone")
+                                .show()
+                                .context("Cannot show notification")?;
+                        }
                         return Ok(());
                     }
 
@@ -174,13 +180,16 @@ impl App {
                         &output
                     };
                     // Show notification with transcribed text
-                    Notification::new()
-                        .summary(summary)
-                        .body(&output)
-                        .icon("audio-input-microphone")
-                        .show()?;
+                    if self.config.shortcuts.notify {
+                        Notification::new()
+                            .summary(summary)
+                            .body(&output)
+                            .icon("audio-input-microphone")
+                            .show()
+                            .context("Cannot show notification")?;
+                    }
 
-                    paste(output)?;
+                    paste(output).context("Pasting")?;
                     // Always end by pressing Return to submit
                     if self.config.shortcuts.autosend {
                         std::thread::sleep(Duration::from_millis(2));
