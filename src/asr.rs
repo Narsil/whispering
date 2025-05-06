@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, anyhow};
 use hf_hub::api::tokio::ApiBuilder;
 use hound::{SampleFormat, WavReader};
+use log::info;
 use std::path::{Path, PathBuf};
 use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
@@ -42,6 +43,7 @@ impl Asr {
     }
 
     pub fn load(&mut self) -> Result<()> {
+        info!("Trying to load model {}", self.model_path.display());
         let context = WhisperContext::new_with_params(
             &self.model_path.to_string_lossy(),
             WhisperContextParameters::default(),

@@ -61,14 +61,16 @@ impl App {
         simulate(&EventType::KeyRelease(Key::ControlLeft))?;
 
         // Initialize audio recorder
-        let recorder = AudioRecorder::new(&config)?;
+        let recorder = AudioRecorder::new(&config).context("Failed to create audio recorder")?;
 
         // Create cache directory if it doesn't exist
         std::fs::create_dir_all(&config.paths.cache_dir)?;
 
         // Download model if it doesn't exist
         install_logging_hooks();
-        let model_path = download_model(&config).await?;
+        let model_path = download_model(&config)
+            .await
+            .context("Failed to download model")?;
 
         let asr = Asr::new(&model_path)?;
         Ok(Self {

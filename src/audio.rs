@@ -4,7 +4,7 @@
 //! and saving it to a WAV file. It handles device initialization, stream configuration,
 //! and audio data processing.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, StreamConfig};
 use hound::{WavSpec, WavWriter};
@@ -110,7 +110,8 @@ impl AudioRecorder {
         let writer = WavWriter::create(
             &config.paths.recording_path,
             Self::create_wav_spec(&config.audio),
-        )?;
+        )
+        .context("Wav writer failed")?;
         let writer = Arc::new(Mutex::new(Some(writer)));
         let writer2 = writer.clone();
         let err_fn = move |err| {
@@ -136,14 +137,16 @@ impl AudioRecorder {
                 samplerate_out,
                 in_channels,
             };
-            device.build_input_stream(
-                &sconfig,
-                move |data, _: &_| {
-                    Self::write_input_data_sample::<f32, f32>(data, &writer3, Some(resample))
-                },
-                err_fn,
-                None,
-            )?
+            device
+                .build_input_stream(
+                    &sconfig,
+                    move |data, _: &_| {
+                        Self::write_input_data_sample::<f32, f32>(data, &writer3, Some(resample))
+                    },
+                    err_fn,
+                    None,
+                )
+                .context("Failed to create fallback stream")?
         };
         stream.pause()?;
 
