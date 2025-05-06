@@ -74,6 +74,7 @@ impl AudioRecorder {
     /// for recording, and sets up the WAV file writer.
     pub fn new(config: &Config) -> Result<Self> {
         let host = cpal::default_host();
+
         let device = host
             .default_input_device()
             .ok_or_else(|| anyhow!("Cannot find input device"))?;
@@ -87,24 +88,28 @@ impl AudioRecorder {
         };
 
         // Check for supported formats
-        let mut supported_configs = device.supported_input_configs()?;
-        let has_desired_format = supported_configs.any(|f| {
-            f.min_sample_rate().0 <= config.audio.sample_rate
-                && f.max_sample_rate().0 >= config.audio.sample_rate
-                && f.channels() == config.audio.channels
-                && f.sample_format()
-                    == match config.audio.sample_format {
-                        crate::config::SampleFormat::Float => cpal::SampleFormat::F32,
-                        crate::config::SampleFormat::Int => cpal::SampleFormat::I16,
-                    }
-        });
+        if let Ok(mut supported_configs) = device
+            .supported_input_configs()
+            .context("Getting supported configs")
+        {
+            let has_desired_format = supported_configs.any(|f| {
+                f.min_sample_rate().0 <= config.audio.sample_rate
+                    && f.max_sample_rate().0 >= config.audio.sample_rate
+                    && f.channels() == config.audio.channels
+                    && f.sample_format()
+                        == match config.audio.sample_format {
+                            crate::config::SampleFormat::Float => cpal::SampleFormat::F32,
+                            crate::config::SampleFormat::Int => cpal::SampleFormat::I16,
+                        }
+            });
 
-        if !has_desired_format {
-            info!("Desired format not explicitly supported, falling back to resampling");
+            if !has_desired_format {
+                info!("Desired format not explicitly supported, falling back to resampling");
+            }
         }
 
         // Create cache directory if it doesn't exist
-        std::fs::create_dir_all(&config.paths.cache_dir)?;
+        std::fs::create_dir_all(&config.paths.cache_dir).context("Creating cache directory")?;
 
         // Create WAV writer
         let writer = WavWriter::create(
@@ -126,7 +131,9 @@ impl AudioRecorder {
         ) {
             stream
         } else {
-            let default_config = device.default_input_config()?;
+            let default_config = device
+                .default_input_config()
+                .context("Failed to get default config")?;
             let samplerate_in = default_config.sample_rate().0;
             let samplerate_out = stream_config.sample_rate.0;
             let writer3 = writer.clone();
@@ -148,7 +155,7 @@ impl AudioRecorder {
                 )
                 .context("Failed to create fallback stream")?
         };
-        stream.pause()?;
+        stream.pause().context("Cannot pause")?;
 
         Ok(Self {
             writer,
