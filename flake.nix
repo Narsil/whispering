@@ -129,19 +129,18 @@
 
             user = lib.mkOption {
               type = lib.types.str;
-              default = "whispering";
               description = "User account under which Whispering runs.";
             };
 
             group = lib.mkOption {
               type = lib.types.str;
-              default = "whispering";
+              default = "users";
               description = "Group under which Whispering runs.";
             };
 
             dataDir = lib.mkOption {
               type = lib.types.path;
-              default = "/var/lib/whispering";
+              default = "/home/${cfg.user}";
               description = "Directory to store Whispering data.";
             };
 
@@ -344,14 +343,6 @@
                 # Set ACL for ALSA devices
                 if [ -e /dev/snd ]; then
                   ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rw- /dev/snd/*
-                fi
-
-                # Set ACL for Wayland socket and runtime directory
-                if [ -e /run/user/1000 ]; then
-                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:r-x /run/user/1000
-                fi
-                if [ -e /run/user/1000/wayland-1 ]; then
-                  ${pkgs.acl}/bin/setfacl -m u:${cfg.user}:rwx /run/user/1000/wayland-1
                 fi
               '';
             };
