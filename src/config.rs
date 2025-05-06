@@ -246,7 +246,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        config.save_to_file(&path)?;
+        config.save_to_file(path)?;
         Ok(config)
     }
 }
@@ -269,17 +269,18 @@ mod tests {
     }
 
     #[test]
-    fn test_config_serialization() {
+    fn test_config_serialization() -> Result<()> {
         let config = Config::default();
-        let toml = toml::to_string(&config).unwrap();
+        let toml = toml::to_string(&config)?;
         println!("TOML output:\n{}", toml);
         assert!(toml.contains("sample_format = \"f32\""));
         assert!(toml.contains("channels = 1"));
         assert!(toml.contains("sample_rate = 16000"));
+        Ok(())
     }
 
     #[test]
-    fn test_config_deserialization() {
+    fn test_config_deserialization() -> Result<()> {
         let toml = r#"
             [audio]
             channels = 2
@@ -302,7 +303,7 @@ mod tests {
             notify = true
         "#;
 
-        let config: Config = toml::from_str(toml).unwrap();
+        let config: Config = toml::from_str(toml)?;
         assert_eq!(config.audio.channels, 2);
         assert_eq!(config.audio.sample_rate, 48000);
         assert!(matches!(config.audio.sample_format, SampleFormat::I16));
@@ -328,6 +329,7 @@ mod tests {
             config.model.replacements.get("wrong"),
             Some(&"right".to_string())
         );
+        Ok(())
     }
 
     #[test]
@@ -372,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn test_example_config() {
+    fn test_example_config() -> Result<()> {
         let minimal_config = r#"
             [audio]
             channels = 1
@@ -395,7 +397,7 @@ mod tests {
             notify = true
         "#;
 
-        let config: Config = toml::from_str(minimal_config).unwrap();
+        let config: Config = toml::from_str(minimal_config)?;
 
         // Verify audio settings
         assert_eq!(config.audio.channels, 1);
@@ -419,11 +421,12 @@ mod tests {
             config.shortcuts.keys,
             HashSet::from([Key::ControlLeft, Key::Space])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_config_file_io() {
-        let temp_dir = tempdir().unwrap();
+    fn test_config_file_io() -> Result<()> {
+        let temp_dir = tempdir()?;
         let config_path = temp_dir.path().join("config.toml");
 
         // Create a test config
@@ -441,10 +444,10 @@ mod tests {
         config.shortcuts.keys = HashSet::from([Key::ControlLeft, Key::Alt, Key::Space]);
 
         // Save config to file
-        config.save_to_file(&config_path).unwrap();
+        config.save_to_file(&config_path)?;
 
         // Load config from file
-        let loaded_config = Config::from_file(&config_path).unwrap();
+        let loaded_config = Config::from_file(&config_path)?;
 
         // Verify loaded config matches original
         assert_eq!(loaded_config.audio.channels, config.audio.channels);
@@ -462,16 +465,17 @@ mod tests {
             config.paths.recording_path
         );
         assert_eq!(loaded_config.shortcuts.keys, config.shortcuts.keys);
+        Ok(())
     }
 
     #[test]
     fn test_example_default_config_round_trip() -> Result<()> {
         // Verify that the default config matches the original
         let default = Config::default();
-        let serialized = toml::to_string(&default).unwrap();
+        let serialized = toml::to_string(&default)?;
 
         // Deserialize the serialized config
-        let deserialized: Config = toml::from_str(&serialized).unwrap();
+        let deserialized: Config = toml::from_str(&serialized)?;
 
         // Verify that the deserialized config matches the original
         assert_eq!(default, deserialized);
@@ -493,12 +497,12 @@ mod tests {
     }
 
     #[test]
-    fn test_config_creation() {
-        let temp_dir = tempdir().unwrap();
+    fn test_config_creation() -> Result<()> {
+        let temp_dir = tempdir()?;
         let config_path = temp_dir.path().join("whispering").join("config.toml");
 
         // Load config (should create default config)
-        let config = Config::load_or_write_default(Some(&config_path)).unwrap();
+        let config = Config::load_or_write_default(Some(&config_path))?;
 
         // Verify config was created
         assert!(config_path.exists());
@@ -509,5 +513,6 @@ mod tests {
         assert!(matches!(config.audio.sample_format, SampleFormat::F32));
         assert_eq!(config.model.repo, "ggerganov/whisper.cpp");
         assert_eq!(config.model.filename, "ggml-base.en.bin");
+        Ok(())
     }
 }

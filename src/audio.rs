@@ -82,18 +82,17 @@ impl AudioRecorder {
         let names: HashSet<_> = devices.into_iter().flat_map(|d| d.name()).collect();
         debug!("Available input devices: {names:?}");
 
-        let devices = host.input_devices()?;
+        let mut devices = host.input_devices()?;
         // Find the requested device or use default
         let device = if let Some(device_name) = &config.audio.device {
             devices
-                .filter(|d| {
+                .find(|d| {
                     if let Ok(name) = d.name() {
                         name == *device_name
                     } else {
                         false
                     }
                 })
-                .next()
                 .ok_or_else(|| {
                     anyhow!(
                         "Requested audio device '{}' not found, available: {:?}",
@@ -132,7 +131,7 @@ impl AudioRecorder {
             debug!("Could not find supported configs");
             if let Ok(default_config) = device.default_input_config() {
                 debug!("Device default config: {:?}", default_config);
-                Some(default_config.into())
+                Some(default_config)
             } else {
                 warn!("Could not default_config");
                 None
@@ -282,13 +281,11 @@ impl AudioRecorder {
                     }
                 }
             }
-        } else {
-            if let Ok(mut guard) = writer.try_lock() {
-                if let Some(writer) = guard.as_mut() {
-                    for &sample in input.iter() {
-                        let sample: U = U::from_sample(sample);
-                        writer.write_sample(sample).ok();
-                    }
+        } else if let Ok(mut guard) = writer.try_lock() {
+            if let Some(writer) = guard.as_mut() {
+                for &sample in input.iter() {
+                    let sample: U = U::from_sample(sample);
+                    writer.write_sample(sample).ok();
                 }
             }
         }
