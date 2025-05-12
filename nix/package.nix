@@ -19,6 +19,7 @@
   cudaPackages,
   libnotify,
   dbus,
+  libiconv,
 }:
 
 let
@@ -106,22 +107,23 @@ let
 in
 rec {
   # Default package based on platform
-  default = if stdenv.isDarwin then darwin else linux-wayland;
+  default = if stdenv.isDarwin then whispering-darwin else linux-wayland;
 
   # Darwin variant with Metal support
-  darwin = mkWhispering {
+  whispering-darwin = mkWhispering {
     features = [ "metal" ];
-    extraBuildInputs = with darwin; [
-      apple_sdk.frameworks.CoreAudio
-      apple_sdk.frameworks.AudioToolbox
-      apple_sdk.frameworks.Metal
-      apple_sdk.frameworks.MetalKit
-      apple_sdk.frameworks.MetalPerformanceShaders
-      apple_sdk.frameworks.Foundation
-      apple_sdk.frameworks.AppKit
-      apple_sdk.frameworks.UserNotifications
+    extraBuildInputs = [
+      darwin.apple_sdk.frameworks.CoreAudio
+      darwin.apple_sdk.frameworks.AudioToolbox
+      darwin.apple_sdk.frameworks.Metal
+      darwin.apple_sdk.frameworks.MetalKit
+      darwin.apple_sdk.frameworks.MetalPerformanceShaders
+      darwin.apple_sdk.frameworks.Foundation
+      darwin.apple_sdk.frameworks.AppKit
+      darwin.apple_sdk.frameworks.UserNotifications
       libiconv
       openssl
+      # darwin.cctools
     ];
     extraEnvVars = {
       CC = "${stdenv.cc}/bin/clang";
@@ -129,7 +131,12 @@ rec {
       MACOSX_DEPLOYMENT_TARGET = "11.0";
       CFLAGS = "-fmodules";
       OBJC_INCLUDE_PATH = "${darwin.apple_sdk.frameworks.Foundation}/include:${darwin.apple_sdk.frameworks.AppKit}/include";
-      LIBRARY_PATH = "${darwin.libiconv}/lib";
+      LIBRARY_PATH = "${libiconv}/lib";
+      BINDGEN_EXTRA_CLANG_ARGS = builtins.concatStringsSep " " [
+        # ''-I"${darwin.cctools}/include"''
+        ''-I"${llvmPackages.libclang.lib}/lib/clang/${llvmPackages.libclang.version}/include"''
+        ''-F"${darwin.apple_sdk.frameworks.CoreFoundation}/Library/Frameworks"''
+      ];
     };
   };
 
