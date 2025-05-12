@@ -1,0 +1,66 @@
+name: Update Dependencies
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run every Sunday at midnight
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update Cargo dependencies
+        id: cargo-update
+        run: |
+          cargo update
+          if [[ -n $(git status --porcelain Cargo.lock) ]]; then
+            echo "cargo_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "cargo_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Flake inputs
+        id: flake-update
+        run: |
+          nix flake update
+          if [[ -n $(git status --porcelain flake.lock) ]]; then
+            echo "flake_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "flake_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run tests
+        if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
+        run: nix build
+
+      - name: Create Pull Request
+        if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): update dependencies"
+          title: "chore(deps): update dependencies"
+          body: |
+            This PR updates the following dependencies:
+            ${steps.cargo-update.outputs.cargo_changes == 'true' && '- Cargo dependencies' || ''}
+            ${steps.flake-update.outputs.flake_changes == 'true' && '- Nix flake inputs' || ''}
+            
+            All tests have passed successfully.
+          branch: "deps/dependency-updates"
+          delete-branch: true
+          labels: dependencies
+
+      - name: Enable auto-merge
+        if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
+        run: |
+          gh pr merge --auto --merge "deps/dependency-updates"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
