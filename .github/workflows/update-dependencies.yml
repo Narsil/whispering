@@ -16,6 +16,11 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - uses: cachix/cachix-action@v14
+        with:
+          name: narsil
+          # If you chose signing key for write access
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Update Cargo dependencies
         id: cargo-update
