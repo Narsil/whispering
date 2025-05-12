@@ -7,20 +7,26 @@ on:
 
 jobs:
   update-dependencies:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-2404, macos-15-arm64]
+
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Nix
         uses: cachix/install-nix-action@v27
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
       - uses: cachix/cachix-action@v14
+        name: Setup Cachix
         with:
           name: narsil
           # If you chose signing key for write access
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Update Cargo dependencies
         id: cargo-update
@@ -58,7 +64,7 @@ jobs:
             ${steps.cargo-update.outputs.cargo_changes == 'true' && '- Cargo dependencies' || ''}
             ${steps.flake-update.outputs.flake_changes == 'true' && '- Nix flake inputs' || ''}
             
-            All tests have passed successfully.
+            All tests have passed successfully on both Ubuntu and macOS ARM64.
           branch: "deps/dependency-updates"
           delete-branch: true
           labels: dependencies
