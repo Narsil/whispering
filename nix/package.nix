@@ -46,6 +46,7 @@ let
   };
   # Common build inputs for all platforms
   commonBuildInputs = [
+    openssl
   ];
   commonNativeBuildInputs = [
     llvmPackages.libclang
@@ -83,6 +84,7 @@ let
       extraBuildInputs ? [ ],
       extraNativeBuildInputs ? [ ],
       extraEnvVars ? { },
+      extraPreConfigure ? "",
       cmakeArgs ? "",
     }:
     rustPlatform.buildRustPackage.override { inherit stdenv; } rec {
@@ -97,12 +99,7 @@ let
           "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
         };
       };
-      preConfigure = ''
-        echo $NIX_CFLAGS_COMPILE
-        export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -march=armv8.6-a";
-        export NIX_CXXFLAGS_COMPILE="$NIX_CXXFLAGS_COMPILE -march=armv8.6-a";
-        echo $NIX_CFLAGS_COMPILE
-      '';
+      preConfigure = extraPreConfigure;
 
       buildFeatures = features;
       CMAKE_ARGS = cmakeArgs;
@@ -127,10 +124,12 @@ rec {
       libiconv
       openssl
     ];
-    extraEnvVars = {
-      # NIX_CFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve";
-      # NIX_CXXFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve";
-    };
+    extraPreConfigure = ''
+      echo $NIX_CFLAGS_COMPILE
+      export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -march=armv8.6-a";
+      export NIX_CXXFLAGS_COMPILE="$NIX_CXXFLAGS_COMPILE -march=armv8.6-a";
+      echo $NIX_CFLAGS_COMPILE
+    '';
   };
 
   # Linux Wayland variant with CUDA support
