@@ -48,6 +48,8 @@
             MACOSX_DEPLOYMENT_TARGET = "11.0";
             CFLAGS = "-fmodules";
             LIBRARY_PATH = "${pkgs.darwin.libiconv}/lib";
+            # NIX_CFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve -O2";
+            # NIX_CXXFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve -O2";
           }
         else
           {

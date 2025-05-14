@@ -46,6 +46,8 @@ let
   };
   # Common build inputs for all platforms
   commonBuildInputs = [
+  ];
+  commonNativeBuildInputs = [
     llvmPackages.libclang
     pkg-config
     cmake
@@ -79,6 +81,7 @@ let
     {
       features ? [ ],
       extraBuildInputs ? [ ],
+      extraNativeBuildInputs ? [ ],
       extraEnvVars ? { },
       cmakeArgs ? "",
     }:
@@ -94,10 +97,16 @@ let
           "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
         };
       };
+      preConfigure = ''
+        echo $NIX_CFLAGS_COMPILE
+        export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -march=armv8.6-a";
+        export NIX_CXXFLAGS_COMPILE="$NIX_CXXFLAGS_COMPILE -march=armv8.6-a";
+        echo $NIX_CFLAGS_COMPILE
+      '';
 
       buildFeatures = features;
       CMAKE_ARGS = cmakeArgs;
-      nativeBuildInputs = commonBuildInputs;
+      nativeBuildInputs = commonNativeBuildInputs ++ extraNativeBuildInputs;
       buildInputs = commonBuildInputs ++ extraBuildInputs;
 
       env = commonEnvVars // extraEnvVars;
@@ -111,12 +120,17 @@ rec {
   # Darwin variant with Metal support
   whispering-darwin = mkWhispering {
     features = [ "metal" ];
+    extraNativeBuildInputs = [
+      rustPlatform.bindgenHook
+    ];
     extraBuildInputs = [
       libiconv
       openssl
-      rustPlatform.bindgenHook
     ];
-    extraEnvVars = { };
+    extraEnvVars = {
+      # NIX_CFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve";
+      # NIX_CXXFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve";
+    };
   };
 
   # Linux Wayland variant with CUDA support
