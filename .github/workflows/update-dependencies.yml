@@ -56,8 +56,24 @@ jobs:
         if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
         run: nix build
 
+      - name: Save changes status
+        run: |
+          if [[ "${{ steps.cargo-update.outputs.cargo_changes }}" == "true" || "${{ steps.flake-update.outputs.flake_changes }}" == "true" ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  create-pr:
+    needs: update-dependencies
+    if: |
+      needs.update-dependencies.result == 'success' &&
+      contains(needs.update-dependencies.outputs.has_changes, 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Create Pull Request
-        if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -74,7 +90,6 @@ jobs:
           labels: dependencies
 
       - name: Enable auto-merge
-        if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
         run: |
           gh pr merge --auto --merge "deps/dependency-updates"
         env:
