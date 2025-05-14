@@ -20,14 +20,6 @@
         if pkgs.stdenv.isDarwin then
           with pkgs;
           [
-            darwin.apple_sdk.frameworks.CoreAudio
-            darwin.apple_sdk.frameworks.AudioToolbox
-            darwin.apple_sdk.frameworks.Metal
-            darwin.apple_sdk.frameworks.MetalKit
-            darwin.apple_sdk.frameworks.MetalPerformanceShaders
-            darwin.apple_sdk.frameworks.Foundation
-            darwin.apple_sdk.frameworks.AppKit
-            darwin.apple_sdk.frameworks.UserNotifications
             darwin.libiconv
             openssl
           ]
@@ -55,7 +47,6 @@
             CXX = "${pkgs.clang}/bin/clang++";
             MACOSX_DEPLOYMENT_TARGET = "11.0";
             CFLAGS = "-fmodules";
-            OBJC_INCLUDE_PATH = "${pkgs.darwin.apple_sdk.frameworks.Foundation}/include:${pkgs.darwin.apple_sdk.frameworks.AppKit}/include";
             LIBRARY_PATH = "${pkgs.darwin.libiconv}/lib";
           }
         else
@@ -76,7 +67,7 @@
           darwinInputs =
             if pkgs.stdenv.isDarwin then
               {
-                inherit (pkgs) darwin;
+                inherit (pkgs) ;
               }
             else
               { };

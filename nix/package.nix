@@ -7,7 +7,6 @@
   cmake,
   llvmPackages,
   openssl,
-  darwin,
   udev,
   libinput,
   alsa-lib,
@@ -113,31 +112,11 @@ rec {
   whispering-darwin = mkWhispering {
     features = [ "metal" ];
     extraBuildInputs = [
-      darwin.apple_sdk.frameworks.CoreAudio
-      darwin.apple_sdk.frameworks.AudioToolbox
-      darwin.apple_sdk.frameworks.Metal
-      darwin.apple_sdk.frameworks.MetalKit
-      darwin.apple_sdk.frameworks.MetalPerformanceShaders
-      darwin.apple_sdk.frameworks.Foundation
-      darwin.apple_sdk.frameworks.AppKit
-      darwin.apple_sdk.frameworks.UserNotifications
       libiconv
       openssl
-      # darwin.cctools
+      rustPlatform.bindgenHook
     ];
-    extraEnvVars = {
-      CC = "${stdenv.cc}/bin/clang";
-      CXX = "${stdenv.cc}/bin/clang++";
-      MACOSX_DEPLOYMENT_TARGET = "11.0";
-      CFLAGS = "-fmodules";
-      OBJC_INCLUDE_PATH = "${darwin.apple_sdk.frameworks.Foundation}/include:${darwin.apple_sdk.frameworks.AppKit}/include";
-      LIBRARY_PATH = "${libiconv}/lib";
-      BINDGEN_EXTRA_CLANG_ARGS = builtins.concatStringsSep " " [
-        # ''-I"${darwin.cctools}/include"''
-        ''-I"${llvmPackages.libclang.lib}/lib/clang/${llvmPackages.libclang.version}/include"''
-        ''-F"${darwin.apple_sdk.frameworks.CoreFoundation}/Library/Frameworks"''
-      ];
-    };
+    extraEnvVars = { };
   };
 
   # Linux Wayland variant with CUDA support
