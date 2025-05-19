@@ -409,6 +409,7 @@
               buildInputs = [
                 rustup
                 llvmPackages.libclang
+                onnxruntime
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
