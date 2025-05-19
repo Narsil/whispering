@@ -99,20 +99,15 @@ impl VADState {
         }
 
         // Audio buffer management (only if recording)
-        if self.state == VADStateEnum::Recording {
+        if self.state == VADStateEnum::Recording || self.state == VADStateEnum::SilenceDetected {
             let audio_buffer_capacity: usize = self.audio_buffer.capacity().into();
             let samples_to_add = samples.len();
-            println!("To add {}", samples_to_add);
-            println!("Occupied {}", self.audio_buffer.occupied_len());
-            println!("Capacity {}", audio_buffer_capacity);
             if self.audio_buffer.occupied_len() + samples_to_add > audio_buffer_capacity {
                 let samples_to_drop =
                     self.audio_buffer.occupied_len() + samples_to_add - audio_buffer_capacity;
-                println!("Samples to drop {samples_to_drop}");
                 let mut drop_buffer = vec![0.0; samples_to_drop];
                 let _ = self.audio_buffer.pop_slice(&mut drop_buffer);
             }
-            println!("pushin {}", samples.len());
             let n = self.audio_buffer.push_slice(samples);
             if n != samples.len() {
                 error!("Audio buffer full, dropping samples");
@@ -329,7 +324,7 @@ impl AudioRecorder {
                         let buf = &mut buffer;
                         for &sample in data {
                             if buf.try_push(sample).is_err() {
-                                eprintln!("Buffer full, dropping samples");
+                                error!("Buffer full, dropping samples");
                             }
                         }
                         // Process chunks of N_SAMPLES samples while we have enough data
@@ -393,14 +388,16 @@ impl AudioRecorder {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     fn create_test_vad_state() -> VADState {
         VADState::new(
-            0.5,  // threshold
-            0.1,  // speech_duration (100ms)
-            0.1,  // silence_duration (100ms)
-            0.05, // pre_buffer_duration (50ms)
+            0.5, // threshold
+            0.1, // speech_duration (100ms)
+            0.1, // silence_duration (100ms)
+            0.1, // pre_buffer_duration (500ms)
         )
     }
 
@@ -409,6 +406,9 @@ mod tests {
         let mut state = create_test_vad_state();
 
         // Test Silent -> SpeechDetected transition
+        // assert_eq!(state.state, VADStateEnum::Silent);
+        // let event = state.process_frame(0.4, &[0.0; N_SAMPLES]);
+        // assert!(event.is_none());
         assert_eq!(state.state, VADStateEnum::Silent);
         let event = state.process_frame(0.6, &[0.0; N_SAMPLES]);
         assert_eq!(state.state, VADStateEnum::SpeechDetected);
@@ -444,8 +444,28 @@ mod tests {
             assert_eq!(state.state, VADStateEnum::SilenceDetected);
         }
         let event = state.process_frame(0.4, &[0.6; N_SAMPLES]);
-        assert_eq!(event, Some(VADEvent::EndSpeech(vec![0.0])));
         assert_eq!(state.state, VADStateEnum::Silent);
+        let Some(VADEvent::EndSpeech(s)) = &event else {
+            panic!("Expected end of speech")
+        };
+        let mut out = BTreeMap::new();
+        for samp in s {
+            let count = out.entry(samp.to_string()).or_insert(0);
+            *count += 1;
+        }
+        println!("out {out:?}");
+        assert_eq!(
+            out,
+            BTreeMap::from([
+                ("0".to_string(), 64),
+                ("0.1".to_string(), 1024),
+                ("0.2".to_string(), 512),
+                ("0.3".to_string(), 512),
+                ("0.4".to_string(), 512),
+                ("0.5".to_string(), 1536),
+                ("0.6".to_string(), 512)
+            ])
+        );
     }
 
     #[test]
