@@ -16,6 +16,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
+    outputs:
+      has_changes: ${{ steps.save-changes.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +59,7 @@ jobs:
         run: nix build
 
       - name: Save changes status
+        id: save-changes
         run: |
           if [[ "${{ steps.cargo-update.outputs.cargo_changes }}" == "true" || "${{ steps.flake-update.outputs.flake_changes }}" == "true" ]]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -66,7 +69,7 @@ jobs:
 
   create-pr:
     needs: update-dependencies
-    if: needs.update-dependencies.steps.cargo-update.outputs.cargo_changes == 'true' || needs.update-dependencies.steps.flake-update.outputs.flake_changes == 'true'
+    if: needs.update-dependencies.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,8 +82,8 @@ jobs:
           title: "chore(deps): update dependencies"
           body: |
             This PR updates the following dependencies:
-            ${steps.cargo-update.outputs.cargo_changes == 'true' && '- Cargo dependencies' || ''}
-            ${steps.flake-update.outputs.flake_changes == 'true' && '- Nix flake inputs' || ''}
+            - Cargo dependencies
+            - Nix flake inputs
             
             All tests have passed successfully on both Ubuntu and macOS ARM64.
           branch: "deps/dependency-updates"
