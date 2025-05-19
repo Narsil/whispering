@@ -4,6 +4,7 @@
 //! event handling, and coordination between different components of the application.
 
 use anyhow::{Context, Result, anyhow};
+
 use log::{error, info};
 use notify_rust::Notification;
 use rdev::{EventType, Key, listen, simulate};
@@ -14,7 +15,7 @@ use tokio::sync::mpsc::unbounded_channel;
 
 use crate::asr::{Asr, download_model};
 use crate::audio::AudioRecorder;
-use crate::config::Config;
+use crate::config::{Config, Trigger};
 use crate::keyboard::paste;
 
 /// Represents the current state of the application.
@@ -101,9 +102,10 @@ impl App {
             Ok(())
         });
 
+        let keys = &self.config.activation.keys;
         info!(
             "Press {:?} to start recording, release the last key to stop",
-            self.config.shortcuts.keys
+            keys
         );
 
         while let Some(event) = rchan.recv().await {
@@ -111,13 +113,14 @@ impl App {
                 error!("error handling event: {err}");
             }
         }
+
         info!("Done exiting");
         Ok(())
     }
 
     fn notify(&self, summary: &str, content: &str) {
         // Show desktop notification
-        if self.config.shortcuts.notify {
+        if self.config.activation.notify {
             if let Err(err) = Notification::new()
                 .summary(summary)
                 .body(content)
@@ -135,13 +138,23 @@ impl App {
     /// accordingly. It manages the recording state and triggers transcription
     /// when recording stops.
     fn handle_event(&mut self, event: rdev::Event) -> Result<()> {
+        match &self.config.activation.trigger {
+            Trigger::PushToTalk => self.handle_event_push_to_talk(event),
+            Trigger::ToggleVad { .. } => self.handle_event_vad(event),
+        }
+    }
+    fn handle_event_vad(&mut self, _event: rdev::Event) -> Result<()> {
+        todo!();
+    }
+    fn handle_event_push_to_talk(&mut self, event: rdev::Event) -> Result<()> {
         match event.event_type {
             EventType::KeyPress(key) => {
-                if self.config.shortcuts.keys.contains(&key) {
+                let keys = &self.config.activation.keys;
+                if keys.contains(&key) {
                     self.state.pressed_keys.insert(key);
                 }
                 // Check if all required keys are pressed
-                let all_keys_pressed = self.config.shortcuts.keys == self.state.pressed_keys;
+                let all_keys_pressed = keys == &self.state.pressed_keys;
 
                 if all_keys_pressed && !self.state.recording {
                     self.state.recording = true;
@@ -154,41 +167,44 @@ impl App {
                 self.state.pressed_keys.retain(|&k| k != key);
 
                 // If we were recording and any required key is released, stop recording
-                if self.state.recording && self.state.pressed_keys != self.config.shortcuts.keys {
-                    self.state.recording = false;
-                    info!("Stopping recording...");
-                    let wav_path = self.recorder.stop_recording()?;
-                    info!("Transcribing audio...");
-                    let output = self
-                        .asr
-                        .run(&wav_path, &self.config)
-                        .context("Error running ASR")?;
-                    if output.is_empty() {
+                if let Trigger::PushToTalk = &self.config.activation.trigger {
+                    let keys = &self.config.activation.keys;
+                    if self.state.recording && self.state.pressed_keys != *keys {
+                        self.state.recording = false;
+                        info!("Stopping recording...");
+                        let wav_path = self.recorder.stop_recording()?;
+                        info!("Transcribing audio...");
+                        let output = self
+                            .asr
+                            .run(&wav_path, &self.config)
+                            .context("Error running ASR")?;
+                        if output.is_empty() {
+                            // Show notification with transcribed text
+                            self.notify("No voice detected", &output);
+                            return Ok(());
+                        }
+
+                        // let output = "Toto".to_string();
+                        info!("Transcribed: {output}");
+                        let summary = if output.len() > 20 {
+                            &format!("{}..", &output[..20])
+                        } else {
+                            &output
+                        };
                         // Show notification with transcribed text
-                        self.notify("No voice detected", &output);
-                        return Ok(());
-                    }
+                        if self.config.activation.notify {
+                            self.notify(summary, &output)
+                        }
 
-                    // let output = "Toto".to_string();
-                    info!("Transcribed: {output}");
-                    let summary = if output.len() > 20 {
-                        &format!("{}..", &output[..20])
-                    } else {
-                        &output
-                    };
-                    // Show notification with transcribed text
-                    if self.config.shortcuts.notify {
-                        self.notify(summary, &output)
-                    }
-
-                    paste(output).context("Pasting")?;
-                    // Always end by pressing Return to submit
-                    if self.config.shortcuts.autosend {
-                        std::thread::sleep(Duration::from_millis(2));
-                        simulate(&EventType::KeyPress(Key::Return))?;
-                        std::thread::sleep(Duration::from_millis(2));
-                        simulate(&EventType::KeyRelease(Key::Return))?;
-                        std::thread::sleep(Duration::from_millis(2));
+                        paste(output).context("Pasting")?;
+                        // Always end by pressing Return to submit
+                        if self.config.activation.autosend {
+                            std::thread::sleep(Duration::from_millis(2));
+                            simulate(&EventType::KeyPress(Key::Return))?;
+                            std::thread::sleep(Duration::from_millis(2));
+                            simulate(&EventType::KeyRelease(Key::Return))?;
+                            std::thread::sleep(Duration::from_millis(2));
+                        }
                     }
                 }
             }

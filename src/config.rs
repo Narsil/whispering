@@ -78,6 +78,53 @@ pub struct PathConfig {
     pub recording_path: PathBuf,
 }
 
+/// Type of activation for recording control
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Trigger {
+    /// Use keyboard shortcuts for activation
+    /// Will send on release
+    PushToTalk,
+    /// Use keyboard shortcuts to start VAD
+    /// activated listening.
+    /// Press again to stop listening
+    ToggleVad {
+        /// Threshold for voice activity detection (0.0 to 1.0)
+        threshold: f32,
+        /// Minimum duration of silence to stop recording (in seconds)
+        silence_duration: f32,
+        /// Minimum duration of speech to start recording (in seconds)
+        speech_duration: f32,
+    },
+}
+
+/// Recording activation configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+#[serde(deny_unknown_fields)]
+pub struct ActivationConfig {
+    /// Type of activation to use
+    pub trigger: Trigger,
+    /// Displays a notification about the capturing
+    pub notify: bool,
+    /// Automatically hit enter after sending the text
+    pub autosend: bool,
+    /// Keys that need to be pressed in sequence
+    pub keys: HashSet<Key>,
+}
+
+impl Default for ActivationConfig {
+    fn default() -> Self {
+        Self {
+            trigger: Trigger::PushToTalk {},
+            notify: true,
+            autosend: false,
+            keys: HashSet::from([Key::ControlLeft, Key::Space]),
+        }
+    }
+}
+
 /// Main application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -89,8 +136,8 @@ pub struct Config {
     pub paths: PathConfig,
     /// Model configuration
     pub model: ModelConfig,
-    /// Keyboard shortcut configuration
-    pub shortcuts: ShortcutConfig,
+    /// Recording activation configuration
+    pub activation: ActivationConfig,
 }
 
 /// Type of prompt to use for the model
@@ -125,29 +172,6 @@ pub struct ModelConfig {
     pub prompt: PromptType,
     /// Map of text to replace with their replacements
     pub replacements: HashMap<String, String>,
-}
-
-/// Keyboard shortcut configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
-#[serde(deny_unknown_fields)]
-pub struct ShortcutConfig {
-    /// Keys that need to be pressed in sequence
-    pub keys: HashSet<Key>,
-    /// Automatically hit enter after sending the text (so sends a message in usual contexts).
-    pub autosend: bool,
-    /// Displays a notification about the capturing
-    pub notify: bool,
-}
-
-impl Default for ShortcutConfig {
-    fn default() -> Self {
-        Self {
-            keys: HashSet::from([Key::ControlLeft, Key::Space]),
-            autosend: false,
-            notify: true,
-        }
-    }
 }
 
 impl PromptType {
@@ -199,7 +223,7 @@ impl Default for Config {
                 recording_path,
             },
             model: ModelConfig::default(),
-            shortcuts: ShortcutConfig::default(),
+            activation: ActivationConfig::default(),
         }
     }
 }
@@ -261,11 +285,16 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.audio.channels, 1);
         assert_eq!(config.audio.sample_rate, 16000);
-        assert!(matches!(config.audio.sample_format, SampleFormat::F32));
+        assert_eq!(config.audio.sample_format, SampleFormat::F32);
         assert_eq!(config.model.repo, "ggerganov/whisper.cpp");
         assert_eq!(config.model.filename, "ggml-base.en.bin");
-        assert!(matches!(config.model.prompt, PromptType::None));
+        assert_eq!(config.model.prompt, PromptType::None);
         assert!(config.model.replacements.is_empty());
+        assert_eq!(
+            config.activation.keys,
+            HashSet::from([Key::ControlLeft, Key::Space])
+        );
+        assert_eq!(config.activation.trigger, Trigger::PushToTalk);
     }
 
     #[test]
@@ -297,16 +326,18 @@ mod tests {
             cache_dir = "/tmp/test"
             recording_path = "/tmp/test/recorded.wav"
 
-            [shortcuts]
-            keys = ["ControlLeft", "Space"]
-            autosend = true
+            [activation]
+            trigger.type = "push-to-talk"
             notify = true
+            autosend = true 
+            keys = ["ControlLeft", "Space"] 
+
         "#;
 
         let config: Config = toml::from_str(toml)?;
         assert_eq!(config.audio.channels, 2);
         assert_eq!(config.audio.sample_rate, 48000);
-        assert!(matches!(config.audio.sample_format, SampleFormat::I16));
+        assert_eq!(config.audio.sample_format, SampleFormat::I16);
         assert_eq!(config.model.repo, "test/repo");
         assert_eq!(config.model.filename, "test.bin");
         assert_eq!(config.paths.cache_dir, PathBuf::from("/tmp/test"));
@@ -318,8 +349,11 @@ mod tests {
             config.model.prompt.get_prompt_text(),
             Some("test, words".to_string())
         );
-        assert!(
-            matches!(config.model.prompt, PromptType::Vocabulary{vocabulary} if vocabulary == vec!["test", "words"])
+        assert_eq!(
+            config.model.prompt,
+            PromptType::Vocabulary {
+                vocabulary: vec!["test".to_string(), "words".to_string()]
+            }
         );
         assert_eq!(
             config.model.replacements.get("incorrect"),
@@ -328,6 +362,48 @@ mod tests {
         assert_eq!(
             config.model.replacements.get("wrong"),
             Some(&"right".to_string())
+        );
+        assert_eq!(
+            config.activation.keys,
+            HashSet::from([Key::ControlLeft, Key::Space]),
+        );
+        assert_eq!(config.activation.trigger, Trigger::PushToTalk);
+        Ok(())
+    }
+
+    #[test]
+    fn test_vad_config() -> Result<()> {
+        let toml = r#"
+            [audio]
+            channels = 1
+            sample_rate = 16000
+            sample_format = "f32"
+
+            [model]
+            repo = "ggerganov/whisper.cpp"
+            filename = "ggml-base.en.bin"
+            prompt = { type = "none" }
+            replacements = {}
+
+            [paths]
+            cache_dir = "~/.cache/whispering"
+            recording_path = "~/.cache/whispering/recorded.wav"
+
+            [activation]
+            trigger = { type = "toggle-vad", threshold = 0.7, silence_duration = 1.5, speech_duration = 0.4 }
+            keys = ["ControlLeft", "Space"]
+            notify = true
+            autosend = true
+        "#;
+
+        let config: Config = toml::from_str(toml)?;
+        assert_eq!(
+            config.activation.trigger,
+            Trigger::ToggleVad {
+                threshold: 0.7,
+                silence_duration: 1.5,
+                speech_duration: 0.4
+            }
         );
         Ok(())
     }
@@ -391,10 +467,11 @@ mod tests {
             cache_dir = "~/.cache/whispering"
             recording_path = "~/.cache/whispering/recorded.wav"
 
-            [shortcuts]
-            keys = ["ControlLeft", "Space"]
-            autosend = true
+            [activation]
+            trigger.type = "push-to-talk"
             notify = true
+            autosend = true 
+            keys = ["ControlLeft", "Space"] 
         "#;
 
         let config: Config = toml::from_str(minimal_config)?;
@@ -416,11 +493,12 @@ mod tests {
             PathBuf::from("~/.cache/whispering/recorded.wav")
         );
 
-        // Verify shortcuts
+        // Verify activation
         assert_eq!(
-            config.shortcuts.keys,
+            config.activation.keys,
             HashSet::from([Key::ControlLeft, Key::Space])
         );
+        assert_eq!(config.activation.trigger, Trigger::PushToTalk);
         Ok(())
     }
 
@@ -441,7 +519,8 @@ mod tests {
         };
         config.paths.cache_dir = PathBuf::from("/tmp/test");
         config.paths.recording_path = PathBuf::from("/tmp/test/recorded.wav");
-        config.shortcuts.keys = HashSet::from([Key::ControlLeft, Key::Alt, Key::Space]);
+        config.activation.trigger = Trigger::PushToTalk;
+        config.activation.keys = HashSet::from([Key::ControlLeft, Key::Alt, Key::Space]);
 
         // Save config to file
         config.save_to_file(&config_path)?;
@@ -464,8 +543,28 @@ mod tests {
             loaded_config.paths.recording_path,
             config.paths.recording_path
         );
-        assert_eq!(loaded_config.shortcuts.keys, config.shortcuts.keys);
+        assert_eq!(loaded_config.activation.trigger, config.activation.trigger);
         Ok(())
+    }
+
+    fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Option<PathBuf> {
+        let p = path_user_input.as_ref();
+        if !p.starts_with("~") {
+            return Some(p.to_path_buf());
+        }
+        if p == Path::new("~") {
+            return dirs::home_dir();
+        }
+        dirs::home_dir().map(|mut h| {
+            if h == Path::new("/") {
+                // Corner case: `h` root directory;
+                // don't prepend extra `/`, just drop the tilde.
+                p.strip_prefix("~").unwrap().to_path_buf()
+            } else {
+                h.push(p.strip_prefix("~/").unwrap());
+                h
+            }
+        })
     }
 
     #[test]
@@ -477,8 +576,15 @@ mod tests {
         // Deserialize the serialized config
         let deserialized: Config = toml::from_str(&serialized)?;
 
+        // Deserialize the serialized config
+        let mut example: Config = toml::from_str(&std::fs::read_to_string("config.example.toml")?)?;
+        example.paths.cache_dir = expand_tilde(example.paths.cache_dir).expect("Something");
+        example.paths.recording_path =
+            expand_tilde(example.paths.recording_path).expect("Something");
+
         // Verify that the deserialized config matches the original
         assert_eq!(default, deserialized);
+        assert_eq!(default, example);
 
         Ok(())
     }

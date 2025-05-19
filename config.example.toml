@@ -33,9 +33,15 @@ cache_dir = "~/.cache/whispering"
 # Path to the recorded audio file
 recording_path = "~/.cache/whispering/recorded.wav"
 
-[shortcuts]
-# Keys that need to be pressed in sequence to start recording
-# Available keys: control, alt, shift, super, space, enter, r, and many others
-keys = ["ControlLeft", "Space"] 
-# Automatically hit enter after sending the text (so sends a message in usual contexts).
+[activation]
+# Type of activation to use for recording control
+# Options:
+# 1. Shortcut-based activation:
+#    trigger.type = "push-to-talk"
+# 2. Voice Activity Detection (VAD):
+#    trigger = { type = "toggle-vad", threshold = 0.5, silence_duration = 1.0, speech_duration = 0.3 }
+trigger.type = "push-to-talk"
+keys = ["ControlLeft", "Space"]
 autosend = false
+# Displays a notification about the capturing
+notify = true
