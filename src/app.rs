@@ -11,10 +11,10 @@ use rdev::{EventType, Key, listen, simulate};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::asr::{Asr, download_model};
-use crate::audio::AudioRecorder;
+use crate::audio::{Audio, AudioRecorder};
 use crate::config::{Config, Trigger};
 use crate::keyboard::paste;
 
@@ -36,8 +36,9 @@ struct State {
 pub struct App {
     state: State,
     recorder: AudioRecorder,
-    asr: Asr,
+    // asr: Asr,
     config: Config,
+    // rx_audio: UnboundedReceiver<PathBuf>,
 }
 
 impl App {
@@ -61,7 +62,10 @@ impl App {
         simulate(&EventType::KeyRelease(Key::ControlLeft))?;
 
         // Initialize audio recorder
-        let recorder = AudioRecorder::new(&config).context("Failed to create audio recorder")?;
+        let (tx_audio, mut rx_audio) = unbounded_channel();
+        let recorder = AudioRecorder::new(&config, tx_audio)
+            .await
+            .context("Failed to create audio recorder")?;
 
         // Create cache directory if it doesn't exist
         std::fs::create_dir_all(&config.paths.cache_dir)?;
@@ -71,14 +75,59 @@ impl App {
             .await
             .context("Failed to download model")?;
 
-        let asr = Asr::new(&model_path)?;
+        let mut asr = Asr::new(&model_path)?;
+        let asr_config = config.clone();
+        tokio::task::spawn(async move {
+            while let Some(audio) = rx_audio.recv().await {
+                let samples: Option<Vec<f32>> = match audio {
+                    Audio::Warm => {
+                        asr.load().expect("Load");
+                        None
+                    }
+                    Audio::Sample(samples) => Some(samples),
+                    Audio::Path(wav_path) => {
+                        info!("Transcribing audio...");
+                        let samples = asr.samples_from_file(&wav_path).expect("Read wav");
+                        Some(samples)
+                    }
+                };
+                if let Some(samples) = samples {
+                    info!("Transcribing audio...");
+                    let output = asr.run(samples, &asr_config).expect("Error running ASR");
+                    if output.is_empty() {
+                        // Show notification with transcribed text
+                        asr_config.notify("No voice detected", &output);
+                        continue;
+                    }
+
+                    // let output = "Toto".to_string();
+                    info!("Transcribed: {output}");
+                    let summary = if output.len() > 20 {
+                        &format!("{}..", &output[..20])
+                    } else {
+                        &output
+                    };
+                    // Show notification with transcribed text
+                    asr_config.notify(summary, &output);
+
+                    paste(output).context("Pasting").expect("Pasting");
+                    // Always end by pressing Return to submit
+                    if config.activation.autosend {
+                        std::thread::sleep(Duration::from_millis(2));
+                        simulate(&EventType::KeyPress(Key::Return)).expect("simulate");
+                        std::thread::sleep(Duration::from_millis(2));
+                        simulate(&EventType::KeyRelease(Key::Return)).expect("simulate");
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                }
+            }
+        });
         Ok(Self {
             state: State {
                 pressed_keys: HashSet::new(),
                 recording: false,
             },
             recorder,
-            asr,
             config,
         })
     }
@@ -187,7 +236,6 @@ impl App {
                     self.state.recording = true;
                     info!("Starting recording...");
                     self.recorder.start_recording()?;
-                    self.asr.load()?;
                 }
             }
             EventType::KeyRelease(key) => {
@@ -197,39 +245,7 @@ impl App {
                 if self.state.recording && self.state.pressed_keys != *keys {
                     self.state.recording = false;
                     info!("Stopping recording...");
-                    let wav_path = self.recorder.stop_recording()?;
-                    info!("Transcribing audio...");
-                    let output = self
-                        .asr
-                        .run(&wav_path, &self.config)
-                        .context("Error running ASR")?;
-                    if output.is_empty() {
-                        // Show notification with transcribed text
-                        self.notify("No voice detected", &output);
-                        return Ok(());
-                    }
-
-                    // let output = "Toto".to_string();
-                    info!("Transcribed: {output}");
-                    let summary = if output.len() > 20 {
-                        &format!("{}..", &output[..20])
-                    } else {
-                        &output
-                    };
-                    // Show notification with transcribed text
-                    if self.config.activation.notify {
-                        self.notify(summary, &output)
-                    }
-
-                    paste(output).context("Pasting")?;
-                    // Always end by pressing Return to submit
-                    if self.config.activation.autosend {
-                        std::thread::sleep(Duration::from_millis(2));
-                        simulate(&EventType::KeyPress(Key::Return))?;
-                        std::thread::sleep(Duration::from_millis(2));
-                        simulate(&EventType::KeyRelease(Key::Return))?;
-                        std::thread::sleep(Duration::from_millis(2));
-                    }
+                    self.recorder.stop_recording()?;
                 }
             }
             _ => (),

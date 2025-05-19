@@ -15,8 +15,11 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::config::{AudioConfig, Config};
+
+use super::Audio;
 
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>;
 
@@ -36,6 +39,7 @@ pub struct AudioRecorder {
     stream: cpal::Stream,
     recording_path: PathBuf,
     config: AudioConfig,
+    tx_audio: UnboundedSender<Audio>,
 }
 
 pub fn audio_resample(
@@ -73,7 +77,7 @@ impl AudioRecorder {
     ///
     /// This function initializes the default audio input device, configures it
     /// for recording, and sets up the WAV file writer.
-    pub fn new(config: &Config) -> Result<Self> {
+    pub fn new(config: &Config, tx_audio: UnboundedSender<Audio>) -> Result<Self> {
         let host = cpal::default_host();
         debug!("Available hosts: {:?}", cpal::available_hosts());
         debug!("Default host: {:?}", host.id());
@@ -199,6 +203,7 @@ impl AudioRecorder {
         Ok(Self {
             writer,
             stream,
+            tx_audio,
             recording_path: config.paths.recording_path.clone(),
             config: config.audio.clone(),
         })
@@ -215,6 +220,7 @@ impl AudioRecorder {
             .lock()
             .map_err(|e| anyhow!("Failed to lock writer: {}", e))? = Some(writer);
         self.stream.play()?;
+        self.tx_audio.send(Audio::Warm)?;
         Ok(())
     }
 
@@ -222,7 +228,7 @@ impl AudioRecorder {
     ///
     /// This function stops the audio stream, finalizes the WAV file, and returns
     /// the path to the recorded audio file.
-    pub fn stop_recording(&self) -> Result<PathBuf> {
+    pub fn stop_recording(&self) -> Result<()> {
         self.stream.pause()?;
         let writer = self
             .writer
@@ -231,7 +237,9 @@ impl AudioRecorder {
             .take()
             .ok_or_else(|| anyhow!("Writer is missing"))?;
         writer.finalize()?;
-        Ok(self.recording_path.clone())
+        let wav_path = self.recording_path.clone();
+        self.tx_audio.send(Audio::Path(wav_path))?;
+        Ok(())
     }
 
     fn write_input_data_sample<T, U>(

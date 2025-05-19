@@ -55,10 +55,30 @@ impl Asr {
         Ok(())
     }
 
+    pub fn samples_from_file(&self, wav_path: &Path) -> Result<Vec<f32>> {
+        let mut reader = WavReader::open(wav_path).context("Opening wav reader")?;
+        let samples: Vec<f32> = if reader.spec().sample_format == SampleFormat::Float {
+            reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
+        } else {
+            reader
+                .samples::<i16>()
+                .map(|s| s.unwrap_or(0) as f32 / 32768.0)
+                .collect()
+        };
+        Ok(samples)
+    }
+
+    pub fn convert_samples(&self, samples: Vec<i16>) -> Result<Vec<f32>> {
+        Ok(samples
+            .into_iter()
+            .map(|s| s as f32 / i16::MAX as f32)
+            .collect())
+    }
+
     /// Runs the Whisper model on the given audio file.
     ///
     /// This function takes a path to a WAV file and returns the transcribed text.
-    pub fn run(&mut self, wav_path: &Path, config: &Config) -> Result<String> {
+    pub fn run(&mut self, samples: Vec<f32>, config: &Config) -> Result<String> {
         // Take context to let it drop later.
         let (_context, mut state) = self.context.take().ok_or(anyhow!("Context was not warm"))?;
 
@@ -72,16 +92,6 @@ impl Asr {
         if let Some(prompt) = config.model.prompt.get_prompt_text() {
             params.set_initial_prompt(&prompt);
         }
-
-        let mut reader = WavReader::open(wav_path).context("Opening wav reader")?;
-        let samples: Vec<f32> = if reader.spec().sample_format == SampleFormat::Float {
-            reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
-        } else {
-            reader
-                .samples::<i16>()
-                .map(|s| s.unwrap_or(0) as f32 / 32768.0)
-                .collect()
-        };
 
         state.full(params, &samples).context("Setting context")?;
 

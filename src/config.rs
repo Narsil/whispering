@@ -4,6 +4,8 @@
 //! configuration, including audio recording settings and model parameters.
 
 use anyhow::{Context, Result};
+use log::error;
+use notify_rust::Notification;
 use rdev::Key;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -279,6 +281,20 @@ impl Config {
         }
         config.save_to_file(path)?;
         Ok(config)
+    }
+
+    pub fn notify(&self, summary: &str, content: &str) {
+        // Show desktop notification
+        if self.activation.notify {
+            if let Err(err) = Notification::new()
+                .summary(summary)
+                .body(content)
+                .icon("audio-input-microphone")
+                .show()
+            {
+                error!("Cannot show notification: {err} , content was : {summary} {content}")
+            };
+        }
     }
 }
 
