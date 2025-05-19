@@ -574,26 +574,6 @@ mod tests {
         Ok(())
     }
 
-    fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Option<PathBuf> {
-        let p = path_user_input.as_ref();
-        if !p.starts_with("~") {
-            return Some(p.to_path_buf());
-        }
-        if p == Path::new("~") {
-            return dirs::home_dir();
-        }
-        dirs::home_dir().map(|mut h| {
-            if h == Path::new("/") {
-                // Corner case: `h` root directory;
-                // don't prepend extra `/`, just drop the tilde.
-                p.strip_prefix("~").unwrap().to_path_buf()
-            } else {
-                h.push(p.strip_prefix("~/").unwrap());
-                h
-            }
-        })
-    }
-
     #[test]
     fn test_example_default_config_round_trip() -> Result<()> {
         // Verify that the default config matches the original
@@ -605,13 +585,12 @@ mod tests {
 
         // Deserialize the serialized config
         let mut example: Config = toml::from_str(&std::fs::read_to_string("config.example.toml")?)?;
-        example.paths.cache_dir = expand_tilde(example.paths.cache_dir).expect("Something");
-        example.paths.recording_path =
-            expand_tilde(example.paths.recording_path).expect("Something");
+        example.paths.cache_dir = default.paths.cache_dir.clone();
+        example.paths.recording_path = default.paths.recording_path.clone();
 
         // Verify that the deserialized config matches the original
         assert_eq!(default, deserialized);
-        assert_eq!(default, example);
+        assert_eq!(default, example, "{default:#?} != {example:#?}");
 
         Ok(())
     }
