@@ -143,8 +143,35 @@ impl App {
             Trigger::ToggleVad { .. } => self.handle_event_vad(event),
         }
     }
-    fn handle_event_vad(&mut self, _event: rdev::Event) -> Result<()> {
-        todo!();
+    fn handle_event_vad(&mut self, event: rdev::Event) -> Result<()> {
+        match event.event_type {
+            EventType::KeyPress(key) => {
+                let keys = &self.config.activation.keys;
+                if keys.contains(&key) {
+                    self.state.pressed_keys.insert(key);
+                }
+                // Check if all required keys are pressed
+                let all_keys_pressed = keys == &self.state.pressed_keys;
+
+                if all_keys_pressed {
+                    self.state.recording = !self.state.recording;
+                    if self.state.recording {
+                        info!("Starting recording...");
+                        self.notify("Start listening..", "");
+                        self.recorder.start_recording()?;
+                    } else {
+                        info!("Stopped recording");
+                        self.notify("Stop listening.", "");
+                        self.recorder.stop_recording()?;
+                    }
+                }
+            }
+            EventType::KeyRelease(key) => {
+                self.state.pressed_keys.retain(|&k| k != key);
+            }
+            _ => (),
+        }
+        Ok(())
     }
     fn handle_event_push_to_talk(&mut self, event: rdev::Event) -> Result<()> {
         match event.event_type {
@@ -166,45 +193,42 @@ impl App {
             EventType::KeyRelease(key) => {
                 self.state.pressed_keys.retain(|&k| k != key);
 
-                // If we were recording and any required key is released, stop recording
-                if let Trigger::PushToTalk = &self.config.activation.trigger {
-                    let keys = &self.config.activation.keys;
-                    if self.state.recording && self.state.pressed_keys != *keys {
-                        self.state.recording = false;
-                        info!("Stopping recording...");
-                        let wav_path = self.recorder.stop_recording()?;
-                        info!("Transcribing audio...");
-                        let output = self
-                            .asr
-                            .run(&wav_path, &self.config)
-                            .context("Error running ASR")?;
-                        if output.is_empty() {
-                            // Show notification with transcribed text
-                            self.notify("No voice detected", &output);
-                            return Ok(());
-                        }
-
-                        // let output = "Toto".to_string();
-                        info!("Transcribed: {output}");
-                        let summary = if output.len() > 20 {
-                            &format!("{}..", &output[..20])
-                        } else {
-                            &output
-                        };
+                let keys = &self.config.activation.keys;
+                if self.state.recording && self.state.pressed_keys != *keys {
+                    self.state.recording = false;
+                    info!("Stopping recording...");
+                    let wav_path = self.recorder.stop_recording()?;
+                    info!("Transcribing audio...");
+                    let output = self
+                        .asr
+                        .run(&wav_path, &self.config)
+                        .context("Error running ASR")?;
+                    if output.is_empty() {
                         // Show notification with transcribed text
-                        if self.config.activation.notify {
-                            self.notify(summary, &output)
-                        }
+                        self.notify("No voice detected", &output);
+                        return Ok(());
+                    }
 
-                        paste(output).context("Pasting")?;
-                        // Always end by pressing Return to submit
-                        if self.config.activation.autosend {
-                            std::thread::sleep(Duration::from_millis(2));
-                            simulate(&EventType::KeyPress(Key::Return))?;
-                            std::thread::sleep(Duration::from_millis(2));
-                            simulate(&EventType::KeyRelease(Key::Return))?;
-                            std::thread::sleep(Duration::from_millis(2));
-                        }
+                    // let output = "Toto".to_string();
+                    info!("Transcribed: {output}");
+                    let summary = if output.len() > 20 {
+                        &format!("{}..", &output[..20])
+                    } else {
+                        &output
+                    };
+                    // Show notification with transcribed text
+                    if self.config.activation.notify {
+                        self.notify(summary, &output)
+                    }
+
+                    paste(output).context("Pasting")?;
+                    // Always end by pressing Return to submit
+                    if self.config.activation.autosend {
+                        std::thread::sleep(Duration::from_millis(2));
+                        simulate(&EventType::KeyPress(Key::Return))?;
+                        std::thread::sleep(Duration::from_millis(2));
+                        simulate(&EventType::KeyRelease(Key::Return))?;
+                        std::thread::sleep(Duration::from_millis(2));
                     }
                 }
             }

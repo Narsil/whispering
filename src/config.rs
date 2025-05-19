@@ -91,12 +91,19 @@ pub enum Trigger {
     /// Press again to stop listening
     ToggleVad {
         /// Threshold for voice activity detection (0.0 to 1.0)
+        #[serde(default = "default_05")]
         threshold: f32,
         /// Minimum duration of silence to stop recording (in seconds)
+        #[serde(default = "default_05")]
         silence_duration: f32,
         /// Minimum duration of speech to start recording (in seconds)
+        #[serde(default = "default_05")]
         speech_duration: f32,
     },
+}
+
+fn default_05() -> f32 {
+    0.5
 }
 
 /// Recording activation configuration
