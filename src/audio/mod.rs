@@ -6,6 +6,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::config::{Config, Trigger};
 
 mod push_to_talk;
+mod resample;
 mod vad;
 
 pub enum AudioRecorder {

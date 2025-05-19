@@ -26,11 +26,6 @@ impl Silero {
     }
 
     pub fn calc_level(&mut self, audio_frame: &[f32; N_SAMPLES]) -> Result<f32, ort::Error> {
-        // let data = audio_frame
-        //     .iter()
-        //     .map(|x| (*x as f32) / (i16::MAX as f32))
-        //     .collect::<Vec<_>>();
-        // let frame = Array2::<f32>::from_shape_vec([1, data.len()], data).unwrap();
         self.frame.iter_mut().zip(audio_frame).for_each(|(s, ns)| {
             *s = *ns;
         });

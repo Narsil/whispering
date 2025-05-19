@@ -18,6 +18,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::audio::resample::{Resample, audio_resample};
 use crate::config::Config;
 
 mod silero;
@@ -99,7 +100,7 @@ impl VADState {
         }
 
         // Audio buffer management (only if recording)
-        if self.state == VADStateEnum::Recording || self.state == VADStateEnum::SilenceDetected {
+        if self.state != VADStateEnum::Silent {
             let audio_buffer_capacity: usize = self.audio_buffer.capacity().into();
             let samples_to_add = samples.len();
             if self.audio_buffer.occupied_len() + samples_to_add > audio_buffer_capacity {
@@ -303,7 +304,6 @@ impl AudioRecorder {
 
         let mut buffer = HeapRb::new(16000 * 2); // 2 seconds buffer at 16kHz
         let mut temp_chunk = [0.0; N_SAMPLES];
-        let mut temp_i16 = vec![0i16; N_SAMPLES];
         let sample_rate = 16_000;
         let api = ApiBuilder::from_env().build()?;
         let model = api.model("Narsil/silero".to_string());
@@ -316,13 +316,61 @@ impl AudioRecorder {
             pre_buffer_duration,
         );
 
+        // Create resampler if needed
+        let resampler = if stream_config.sample_rate().0 != config.audio.sample_rate
+            || stream_config.channels() != config.audio.channels
+            || stream_config.sample_format() != cpal::SampleFormat::F32
+        {
+            if stream_config.sample_format() != cpal::SampleFormat::F32 {
+                todo!("Unimplemented resampling samples");
+            }
+            Some(Resample {
+                samplerate_in: stream_config.sample_rate().0,
+                samplerate_out: 16000,
+                in_channels: stream_config.channels(),
+            })
+        } else {
+            None
+        };
+
         let stream = Arc::new(Mutex::new(
             device
                 .build_input_stream(
                     &stream_config.into(),
-                    move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                        let data = if let Some(resampler) = resampler {
+                            // Convert the input samples to f32
+                            let samples: Vec<f32> = data.to_vec();
+
+                            // Resample the stereo audio to the desired sample rate
+                            // let resampled_stereo: Vec<f32> = audio_resample(&samples, sample_rate, 16000, channels);
+                            let resampled_stereo: Vec<f32> = audio_resample(
+                                &samples,
+                                resampler.samplerate_in,
+                                resampler.samplerate_out,
+                                resampler.in_channels,
+                            );
+
+                            let samples = if resampler.in_channels != 1 {
+                                let n = resampler.in_channels as usize;
+                                // Convert the resampled stereo audio to mono
+                                let mono_samples: Vec<_> = resampled_stereo
+                                    .chunks(n)
+                                    .map(|chunk| {
+                                        let mono_sample = (chunk.iter().sum::<f32>()) / n as f32; // Average channels
+                                        mono_sample
+                                    })
+                                    .collect();
+                                mono_samples
+                            } else {
+                                resampled_stereo
+                            };
+                            samples
+                        } else {
+                            data.to_vec()
+                        };
                         let buf = &mut buffer;
-                        for &sample in data {
+                        for &sample in &data {
                             if buf.try_push(sample).is_err() {
                                 error!("Buffer full, dropping samples");
                             }
@@ -330,11 +378,8 @@ impl AudioRecorder {
                         // Process chunks of N_SAMPLES samples while we have enough data
                         while buf.occupied_len() >= N_SAMPLES {
                             // Get a chunk of N_SAMPLES samples efficiently
-                            let n = buf.pop_slice(&mut temp_i16);
+                            let n = buf.pop_slice(&mut temp_chunk);
                             assert_eq!(n, N_SAMPLES, "Expected to pop N_SAMPLES from buffer");
-                            for (i, &sample) in temp_i16.iter().enumerate() {
-                                temp_chunk[i] = sample as f32 / i16::MAX as f32;
-                            }
                             // Process the chunk
                             let speech_prob: f32 = silero.calc_level(&temp_chunk).expect("Prob");
                             // Update VAD state and handle events

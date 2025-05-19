@@ -17,18 +17,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::audio::resample::Resample;
 use crate::config::{AudioConfig, Config};
 
 use super::Audio;
+use super::resample::audio_resample;
 
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>;
-
-#[derive(Clone, Copy)]
-struct Resample {
-    samplerate_in: u32,
-    samplerate_out: u32,
-    in_channels: u16,
-}
 
 /// Handles audio recording functionality.
 ///
@@ -40,23 +35,6 @@ pub struct AudioRecorder {
     recording_path: PathBuf,
     config: AudioConfig,
     tx_audio: UnboundedSender<Audio>,
-}
-
-pub fn audio_resample(
-    data: &[f32],
-    sample_rate0: u32,
-    sample_rate: u32,
-    channels: u16,
-) -> Vec<f32> {
-    use samplerate::{ConverterType, convert};
-    convert(
-        sample_rate0 as _,
-        sample_rate as _,
-        channels as _,
-        ConverterType::SincBestQuality,
-        data,
-    )
-    .unwrap_or_default()
 }
 
 impl AudioRecorder {
