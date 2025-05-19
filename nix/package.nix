@@ -7,6 +7,7 @@
   cmake,
   llvmPackages,
   openssl,
+  onnxruntime,
   udev,
   libinput,
   alsa-lib,
@@ -47,6 +48,7 @@ let
   # Common build inputs for all platforms
   commonBuildInputs = [
     openssl
+    onnxruntime
   ];
   commonNativeBuildInputs = [
     llvmPackages.libclang
@@ -58,6 +60,7 @@ let
   commonEnvVars = {
     LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
     BINDGEN_EXTRA_CLANG_ARGS = ''-I"${llvmPackages.libclang.lib}/lib/clang/${llvmPackages.libclang.version}/include"'';
+    ORT_LIB_LOCATION = "${onnxruntime}/lib";
   };
 
   # CUDA-specific configuration
