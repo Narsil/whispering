@@ -66,9 +66,7 @@ jobs:
 
   create-pr:
     needs: update-dependencies
-    if: |
-      needs.update-dependencies.result == 'success' &&
-      contains(needs.update-dependencies.outputs.has_changes, 'true')
+    if: contains(needs.update-dependencies.outputs.has_changes, 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
