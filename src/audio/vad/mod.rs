@@ -16,7 +16,6 @@ use ringbuf::{
 };
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::config::Config;
@@ -27,22 +26,33 @@ use silero::Silero;
 use super::Audio;
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 enum VADEvent {
     StartSpeech,
     EndSpeech(Vec<f32>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum VADStateEnum {
+    /// Completely silent, no speech detected
+    Silent,
+    /// Speech detected but not yet reached threshold to start recording
+    SpeechDetected,
+    /// Actively recording speech
+    Recording,
+    /// Silence detected but still within the speech threshold
+    SilenceDetected,
+}
+
 struct VADState {
-    is_talking: bool,
-    last_speech_time: Instant,
-    last_silence_time: Instant,
-    speech_duration: Duration,
-    silence_duration: Duration,
+    state: VADStateEnum,
+    speech_samples: usize,
+    silence_samples: usize,
+    speech_threshold_samples: usize,
+    silence_threshold_samples: usize,
     threshold: f32,
-    audio_buffer: Vec<f32>,
-    pre_buffer: Vec<f32>,
-    pre_buffer_size: usize,
+    audio_buffer: HeapRb<f32>,
+    pre_buffer: HeapRb<f32>,
 }
 
 impl VADState {
@@ -52,60 +62,143 @@ impl VADState {
         silence_duration: f32,
         pre_buffer_duration: f32,
     ) -> Self {
-        // Calculate pre-buffer size based on sample rate (16kHz) and duration
-        let pre_buffer_size = (16000.0 * pre_buffer_duration) as usize;
+        // Calculate sizes based on sample rate (16kHz)
+        let sample_rate = 16000.0;
+        let pre_buffer_size = (sample_rate * pre_buffer_duration) as usize;
+        let speech_threshold_samples = (sample_rate * speech_duration) as usize;
+        let silence_threshold_samples = (sample_rate * silence_duration) as usize;
+
         Self {
-            is_talking: false,
-            last_speech_time: Instant::now(),
-            last_silence_time: Instant::now(),
-            speech_duration: Duration::from_secs_f32(speech_duration),
-            silence_duration: Duration::from_secs_f32(silence_duration),
+            state: VADStateEnum::Silent,
+            speech_samples: 0,
+            silence_samples: 0,
+            speech_threshold_samples,
+            silence_threshold_samples,
             threshold,
-            audio_buffer: Vec::new(),
-            pre_buffer: Vec::with_capacity(pre_buffer_size),
-            pre_buffer_size,
+            // Create a large enough buffer for the maximum possible recording length
+            audio_buffer: HeapRb::new(16000 * 60), // 60 seconds buffer
+            pre_buffer: HeapRb::new(pre_buffer_size),
         }
     }
 
-    fn update(&mut self, speech_prob: f32, current_time: Instant) -> Option<VADEvent> {
-        if speech_prob > self.threshold {
-            self.last_speech_time = current_time;
-            if !self.is_talking {
-                // Check if we've been silent long enough to start a new utterance
-                if current_time.duration_since(self.last_silence_time) >= self.silence_duration {
-                    self.is_talking = true;
-                    self.audio_buffer.clear();
-                    // Add pre-buffer to the start of audio_buffer
-                    self.audio_buffer.extend(self.pre_buffer.iter().cloned());
-                    return Some(VADEvent::StartSpeech);
+    /// Process a frame: update state and manage buffers in sync
+    fn process_frame(&mut self, speech_prob: f32, samples: &[f32; N_SAMPLES]) -> Option<VADEvent> {
+        // Buffer management (pre-buffer and audio buffer) is now always in sync with state
+        let pre_buffer_capacity: usize = self.pre_buffer.capacity().into();
+        let samples_to_add = samples.len();
+        // Pre-buffer management
+        if self.pre_buffer.occupied_len() + samples_to_add > pre_buffer_capacity {
+            let samples_to_drop =
+                self.pre_buffer.occupied_len() + samples_to_add - pre_buffer_capacity;
+            let mut drop_buffer = vec![0.0; samples_to_drop];
+            let _ = self.pre_buffer.pop_slice(&mut drop_buffer);
+        }
+        let n = self.pre_buffer.push_slice(samples);
+        if n != samples.len() {
+            error!("Failed to add samples to pre-buffer");
+        }
+
+        // Audio buffer management (only if recording)
+        if self.state == VADStateEnum::Recording {
+            let audio_buffer_capacity: usize = self.audio_buffer.capacity().into();
+            let samples_to_add = samples.len();
+            println!("To add {}", samples_to_add);
+            println!("Occupied {}", self.audio_buffer.occupied_len());
+            println!("Capacity {}", audio_buffer_capacity);
+            if self.audio_buffer.occupied_len() + samples_to_add > audio_buffer_capacity {
+                let samples_to_drop =
+                    self.audio_buffer.occupied_len() + samples_to_add - audio_buffer_capacity;
+                println!("Samples to drop {samples_to_drop}");
+                let mut drop_buffer = vec![0.0; samples_to_drop];
+                let _ = self.audio_buffer.pop_slice(&mut drop_buffer);
+            }
+            println!("pushin {}", samples.len());
+            let n = self.audio_buffer.push_slice(samples);
+            if n != samples.len() {
+                error!("Audio buffer full, dropping samples");
+            }
+        }
+
+        // State machine logic (copied from update)
+        match self.state {
+            VADStateEnum::Silent => {
+                if speech_prob > self.threshold {
+                    self.speech_samples += N_SAMPLES;
+                    self.silence_samples = 0;
+                    if self.speech_samples >= self.speech_threshold_samples {
+                        self.state = VADStateEnum::Recording;
+                        self.audio_buffer.clear();
+                        // Add pre-buffer to the start of audio_buffer
+                        let mut temp = vec![0.0; self.pre_buffer.occupied_len()];
+                        let n = self.pre_buffer.pop_slice(&mut temp);
+                        let _ = self.audio_buffer.push_slice(&temp[..n]);
+                        return Some(VADEvent::StartSpeech);
+                    } else {
+                        self.state = VADStateEnum::SpeechDetected;
+                    }
+                } else {
+                    self.silence_samples += N_SAMPLES;
+                    self.speech_samples = 0;
                 }
             }
-        } else {
-            self.last_silence_time = current_time;
-            if self.is_talking {
-                // Check if we've been talking long enough to consider it valid speech
-                if current_time.duration_since(self.last_speech_time) >= self.speech_duration {
-                    self.is_talking = false;
-                    return Some(VADEvent::EndSpeech(self.audio_buffer.drain(..).collect()));
+            VADStateEnum::SpeechDetected => {
+                if speech_prob > self.threshold {
+                    self.speech_samples += N_SAMPLES;
+                    self.silence_samples = 0;
+                    if self.speech_samples >= self.speech_threshold_samples {
+                        self.state = VADStateEnum::Recording;
+                        self.audio_buffer.clear();
+                        // Add pre-buffer to the start of audio_buffer
+                        let mut temp = vec![0.0; self.pre_buffer.occupied_len()];
+                        let n = self.pre_buffer.pop_slice(&mut temp);
+                        let _ = self.audio_buffer.push_slice(&temp[..n]);
+                        return Some(VADEvent::StartSpeech);
+                    }
+                } else {
+                    self.state = VADStateEnum::Silent;
+                    self.silence_samples += N_SAMPLES;
+                    self.speech_samples = 0;
+                }
+            }
+            VADStateEnum::Recording => {
+                if speech_prob > self.threshold {
+                    self.speech_samples += N_SAMPLES;
+                    self.silence_samples = 0;
+                } else {
+                    self.silence_samples += N_SAMPLES;
+                    self.speech_samples = 0;
+                    if self.silence_samples >= self.silence_threshold_samples {
+                        self.state = VADStateEnum::Silent;
+                        // Collect all samples from the audio buffer
+                        let mut samples = vec![0.0; self.audio_buffer.occupied_len()];
+                        let n = self.audio_buffer.pop_slice(&mut samples);
+                        samples.truncate(n);
+                        return Some(VADEvent::EndSpeech(samples));
+                    } else {
+                        self.state = VADStateEnum::SilenceDetected;
+                    }
+                }
+            }
+            VADStateEnum::SilenceDetected => {
+                if speech_prob > self.threshold {
+                    self.state = VADStateEnum::Recording;
+                    self.speech_samples += N_SAMPLES;
+                    self.silence_samples = 0;
+                } else {
+                    self.silence_samples += N_SAMPLES;
+                    self.speech_samples = 0;
+                    if self.silence_samples >= self.silence_threshold_samples {
+                        self.state = VADStateEnum::Silent;
+                        // Collect all samples from the audio buffer
+                        let mut samples = vec![0.0; self.audio_buffer.occupied_len()];
+                        let n = self.audio_buffer.pop_slice(&mut samples);
+                        samples.truncate(n);
+                        return Some(VADEvent::EndSpeech(samples));
+                    }
                 }
             }
         }
         None
-    }
-
-    fn add_samples(&mut self, samples: &[f32]) {
-        // Always update pre-buffer
-        self.pre_buffer.extend_from_slice(samples);
-        // Keep only the last pre_buffer_size samples
-        if self.pre_buffer.len() > self.pre_buffer_size {
-            self.pre_buffer
-                .drain(0..(self.pre_buffer.len() - self.pre_buffer_size));
-        }
-
-        // Add to main buffer if we're talking
-        if self.is_talking {
-            self.audio_buffer.extend_from_slice(samples);
-        }
     }
 }
 
@@ -215,6 +308,7 @@ impl AudioRecorder {
 
         let mut buffer = HeapRb::new(16000 * 2); // 2 seconds buffer at 16kHz
         let mut temp_chunk = [0.0; N_SAMPLES];
+        let mut temp_i16 = vec![0i16; N_SAMPLES];
         let sample_rate = 16_000;
         let api = ApiBuilder::from_env().build()?;
         let model = api.model("Narsil/silero".to_string());
@@ -238,20 +332,18 @@ impl AudioRecorder {
                                 eprintln!("Buffer full, dropping samples");
                             }
                         }
-                        // Process chunks of 1024 samples while we have enough data
+                        // Process chunks of N_SAMPLES samples while we have enough data
                         while buf.occupied_len() >= N_SAMPLES {
-                            // Get a chunk of 1024 samples
-                            for i in 0..N_SAMPLES {
-                                let sample = buf.try_pop().expect("Sample to exist");
+                            // Get a chunk of N_SAMPLES samples efficiently
+                            let n = buf.pop_slice(&mut temp_i16);
+                            assert_eq!(n, N_SAMPLES, "Expected to pop N_SAMPLES from buffer");
+                            for (i, &sample) in temp_i16.iter().enumerate() {
                                 temp_chunk[i] = sample as f32 / i16::MAX as f32;
                             }
-
                             // Process the chunk
                             let speech_prob: f32 = silero.calc_level(&temp_chunk).expect("Prob");
-                            let current_time = Instant::now();
-
                             // Update VAD state and handle events
-                            if let Some(event) = vad_state.update(speech_prob, current_time) {
+                            if let Some(event) = vad_state.process_frame(speech_prob, &temp_chunk) {
                                 match event {
                                     VADEvent::StartSpeech => {
                                         tx_audio.send(Audio::Warm).expect("Send warm event");
@@ -265,9 +357,6 @@ impl AudioRecorder {
                                     }
                                 }
                             }
-
-                            // Always buffer audio when we detect speech
-                            vad_state.add_samples(&temp_chunk);
                         }
                     },
                     err_fn,
@@ -299,5 +388,98 @@ impl AudioRecorder {
     pub fn stop_recording(&self) -> Result<()> {
         self.stream.lock().unwrap().pause()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_vad_state() -> VADState {
+        VADState::new(
+            0.5,  // threshold
+            0.1,  // speech_duration (100ms)
+            0.1,  // silence_duration (100ms)
+            0.05, // pre_buffer_duration (50ms)
+        )
+    }
+
+    #[test]
+    fn test_vad_state_transitions() {
+        let mut state = create_test_vad_state();
+
+        // Test Silent -> SpeechDetected transition
+        assert_eq!(state.state, VADStateEnum::Silent);
+        let event = state.process_frame(0.6, &[0.0; N_SAMPLES]);
+        assert_eq!(state.state, VADStateEnum::SpeechDetected);
+        assert!(event.is_none());
+
+        // Test SpeechDetected -> Recording transition
+        // Need to send enough samples to cross speech threshold
+        let samples_needed = state.speech_threshold_samples / N_SAMPLES;
+        for _ in 0..samples_needed - 1 {
+            let event = state.process_frame(0.6, &[0.1; N_SAMPLES]);
+            assert_eq!(event, None);
+            assert_eq!(state.state, VADStateEnum::SpeechDetected);
+        }
+        let event = state.process_frame(0.6, &[0.2; N_SAMPLES]);
+        assert_eq!(event, Some(VADEvent::StartSpeech));
+        assert_eq!(state.state, VADStateEnum::Recording);
+
+        // Test Recording -> SilenceDetected transition
+        let event = state.process_frame(0.4, &[0.3; N_SAMPLES]);
+        assert_eq!(state.state, VADStateEnum::SilenceDetected);
+        assert_eq!(event, None);
+
+        // Test SilenceDetected -> Recording transition (speech resumes)
+        let event = state.process_frame(0.6, &[0.4; N_SAMPLES]);
+        assert_eq!(state.state, VADStateEnum::Recording);
+        assert!(event.is_none());
+
+        // Need to send enough samples to cross silence threshold
+        let samples_needed = state.silence_threshold_samples / N_SAMPLES;
+        for _ in 0..samples_needed {
+            let event = state.process_frame(0.4, &[0.5; N_SAMPLES]);
+            assert_eq!(event, None);
+            assert_eq!(state.state, VADStateEnum::SilenceDetected);
+        }
+        let event = state.process_frame(0.4, &[0.6; N_SAMPLES]);
+        assert_eq!(event, Some(VADEvent::EndSpeech(vec![0.0])));
+        assert_eq!(state.state, VADStateEnum::Silent);
+    }
+
+    #[test]
+    fn test_threshold_edge_cases() {
+        let mut state = create_test_vad_state();
+
+        // Test exactly at threshold
+        let event = state.process_frame(0.5, &[0.0; N_SAMPLES]);
+        assert_eq!(state.state, VADStateEnum::Silent);
+        assert!(event.is_none());
+
+        // Test just above threshold
+        let event = state.process_frame(0.5001, &[0.0; N_SAMPLES]);
+        assert_eq!(state.state, VADStateEnum::SpeechDetected);
+        assert!(event.is_none());
+
+        // Test just below threshold
+        let event = state.process_frame(0.4999, &[0.0; N_SAMPLES]);
+        assert_eq!(state.state, VADStateEnum::Silent);
+        assert!(event.is_none());
+    }
+
+    #[test]
+    fn test_pre_buffer_content() {
+        let mut state = create_test_vad_state();
+
+        // Add some samples to pre-buffer
+        let test_samples = &[1.0; N_SAMPLES];
+        state.process_frame(0.0, test_samples);
+
+        // Verify pre-buffer contains the samples
+        let mut buffer = vec![0.0; test_samples.len()];
+        let n = state.pre_buffer.pop_slice(&mut buffer);
+        assert_eq!(n, test_samples.len());
+        assert_eq!(buffer, test_samples);
     }
 }
