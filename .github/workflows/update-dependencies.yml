@@ -74,6 +74,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - uses: cachix/cachix-action@v14
+        name: Setup Cachix
+        with:
+          name: narsil
+          # If you chose signing key for write access
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update Cargo dependencies
+        run: cargo update
+
+      - name: Update Flake inputs
+        run: nix flake update
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
