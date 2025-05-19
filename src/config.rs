@@ -99,14 +99,17 @@ pub enum Trigger {
         #[serde(default = "default_05")]
         silence_duration: f32,
         /// Minimum duration of speech to start recording (in seconds)
-        #[serde(default = "default_05")]
+        #[serde(default = "default_1")]
         speech_duration: f32,
         /// Amount of audio to keep before voice detection (in seconds)
-        #[serde(default = "default_05")]
+        #[serde(default = "default_1")]
         pre_buffer_duration: f32,
     },
 }
 
+fn default_1() -> f32 {
+    1.0
+}
 fn default_05() -> f32 {
     0.5
 }
