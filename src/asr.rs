@@ -68,13 +68,6 @@ impl Asr {
         Ok(samples)
     }
 
-    pub fn convert_samples(&self, samples: Vec<i16>) -> Result<Vec<f32>> {
-        Ok(samples
-            .into_iter()
-            .map(|s| s as f32 / i16::MAX as f32)
-            .collect())
-    }
-
     /// Runs the Whisper model on the given audio file.
     ///
     /// This function takes a path to a WAV file and returns the transcribed text.

@@ -101,6 +101,9 @@ pub enum Trigger {
         /// Minimum duration of speech to start recording (in seconds)
         #[serde(default = "default_05")]
         speech_duration: f32,
+        /// Amount of audio to keep before voice detection (in seconds)
+        #[serde(default = "default_05")]
+        pre_buffer_duration: f32,
     },
 }
 
@@ -413,7 +416,7 @@ mod tests {
             recording_path = "~/.cache/whispering/recorded.wav"
 
             [activation]
-            trigger = { type = "toggle-vad", threshold = 0.7, silence_duration = 1.5, speech_duration = 0.4 }
+            trigger = { type = "toggle-vad", threshold = 0.7, silence_duration = 1.5, speech_duration = 0.4, pre_buffer_duration = 0.3 }
             keys = ["ControlLeft", "Space"]
             notify = true
             autosend = true
@@ -425,7 +428,8 @@ mod tests {
             Trigger::ToggleVad {
                 threshold: 0.7,
                 silence_duration: 1.5,
-                speech_duration: 0.4
+                speech_duration: 0.4,
+                pre_buffer_duration: 0.3
             }
         );
         Ok(())

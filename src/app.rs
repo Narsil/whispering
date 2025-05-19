@@ -11,7 +11,7 @@ use rdev::{EventType, Key, listen, simulate};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::unbounded_channel;
 
 use crate::asr::{Asr, download_model};
 use crate::audio::{Audio, AudioRecorder};

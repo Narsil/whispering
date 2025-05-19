@@ -29,7 +29,18 @@ impl AudioRecorder {
                 threshold,
                 silence_duration,
                 speech_duration,
-            } => Ok(Self::Vad(vad::AudioRecorder::new(config, tx_audio).await?)),
+                pre_buffer_duration,
+            } => Ok(Self::Vad(
+                vad::AudioRecorder::new(
+                    config,
+                    threshold,
+                    silence_duration,
+                    speech_duration,
+                    pre_buffer_duration,
+                    tx_audio,
+                )
+                .await?,
+            )),
         }
     }
     pub fn start_recording(&mut self) -> Result<()> {
