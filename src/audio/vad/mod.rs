@@ -333,6 +333,7 @@ impl AudioRecorder {
             None
         };
 
+        let mut i = 0;
         let stream = Arc::new(Mutex::new(
             device
                 .build_input_stream(
@@ -377,11 +378,17 @@ impl AudioRecorder {
                         }
                         // Process chunks of N_SAMPLES samples while we have enough data
                         while buf.occupied_len() >= N_SAMPLES {
+                            i += 1;
                             // Get a chunk of N_SAMPLES samples efficiently
                             let n = buf.pop_slice(&mut temp_chunk);
                             assert_eq!(n, N_SAMPLES, "Expected to pop N_SAMPLES from buffer");
                             // Process the chunk
-                            let speech_prob: f32 = silero.calc_level(&temp_chunk).expect("Prob");
+                            let speech_prob: f32 =
+                                if vad_state.state == VADStateEnum::Silent && i % 20 != 0 {
+                                    0.4
+                                } else {
+                                    silero.calc_level(&temp_chunk).expect("Prob")
+                                };
                             // Update VAD state and handle events
                             if let Some(event) = vad_state.process_frame(speech_prob, &temp_chunk) {
                                 match event {

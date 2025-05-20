@@ -26,6 +26,7 @@ impl Silero {
     }
 
     pub fn calc_level(&mut self, audio_frame: &[f32; N_SAMPLES]) -> Result<f32, ort::Error> {
+        let start = std::time::Instant::now();
         self.frame.iter_mut().zip(audio_frame).for_each(|(s, ns)| {
             *s = *ns;
         });
@@ -34,13 +35,17 @@ impl Silero {
             std::mem::take(&mut self.state),
             self.sample_rate.clone(),
         ]?;
+        log::info!("Overhead {:?}", start.elapsed());
         let res = self.session.run(SessionInputs::ValueSlice::<3>(&inps))?;
+        log::info!("Ran {:?}", start.elapsed());
         self.state = res["stateN"].try_extract_tensor().unwrap().to_owned();
-        Ok(*res["output"]
+        let output = *res["output"]
             .try_extract_raw_tensor::<f32>()
             .unwrap()
             .1
             .first()
-            .unwrap())
+            .unwrap();
+        log::info!("POst overhead {:?}", start.elapsed());
+        Ok(output)
     }
 }
