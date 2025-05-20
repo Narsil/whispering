@@ -56,7 +56,7 @@ jobs:
 
       - name: Run tests
         if: steps.cargo-update.outputs.cargo_changes == 'true' || steps.flake-update.outputs.flake_changes == 'true'
-        run: nix build
+        run: nix build --cores 8
 
       - name: Save changes status
         id: save-changes
