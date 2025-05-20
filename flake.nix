@@ -424,6 +424,15 @@
         whispering = nixosModule; # Add an alias for easier importing
       };
 
+      nixConfig = {
+        extra-subsituters = [
+          "https://narsil.cachix.org"
+        ];
+        extra-trusted-public-keys = [
+          "narsil.cachix.org-1:eTLhYqg5uVi7Pv3x6L/Ov8NdESEpGeViXiwGKLYpo90="
+        ];
+      };
+
       # Add overlay to make the package available in nixpkgs
       overlays = {
         default = final: prev: {
