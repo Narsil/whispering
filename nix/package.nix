@@ -15,6 +15,7 @@
   wayland,
   wayland-protocols,
   wayland-scanner,
+  libxkbcommon,
   xorg,
   cudaPackages,
   libnotify,
@@ -151,6 +152,7 @@ rec {
       wayland-protocols
       wayland-scanner
       libnotify
+      libxkbcommon
       dbus
     ] ++ cudaConfig.buildInputs;
     extraEnvVars = cudaConfig.envVars;
