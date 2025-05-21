@@ -384,7 +384,7 @@ impl AudioRecorder {
                             assert_eq!(n, N_SAMPLES, "Expected to pop N_SAMPLES from buffer");
                             // Process the chunk
                             let speech_prob: f32 =
-                                if vad_state.state == VADStateEnum::Silent && i % 20 != 0 {
+                                if vad_state.state == VADStateEnum::Silent && i % 5 != 0 {
                                     0.4
                                 } else {
                                     silero.calc_level(&temp_chunk).expect("Prob")
