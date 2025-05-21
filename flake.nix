@@ -410,6 +410,7 @@
                 rustup
                 llvmPackages.libclang
                 onnxruntime
+                libxkbcommon
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
