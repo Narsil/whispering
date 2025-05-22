@@ -32,7 +32,7 @@ let
       sha256 = "sha256-lLSLX38GRddcOvyEGSoAgUUmUc+2gqLtkh2mMH5xNM4=";
     };
     metal = fetchzip {
-      url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.22.0/ortrs_static-v1.22.0-aarch64-apple-darwin.tgz";
+      url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_static-v1.20.0-aarch64-apple-darwin.tgz";
       sha256 = "sha256-cmiVcY7ds+WcodwbKnOnPsWDGoGE0+iSdEAy1erMUso=";
     };
   };
@@ -143,7 +143,7 @@ rec {
       onnxruntime.metal
     ];
     extraPreConfigure = ''
-      export ORT_LIB_LOCATION="${onnxruntime.metal}/lib";
+      export OCan you write me a Rust proxy using axiom?RT_LIB_LOCATION="${onnxruntime.metal}/lib";
       export MACOSX_DEPLOYMENT_TARGET="11.3";
       export RUSTFLAGS="$RUSTFLAGS -C link-arg=-fapple-link-rtlib";
     '';
