@@ -32,8 +32,8 @@ let
       sha256 = "sha256-lLSLX38GRddcOvyEGSoAgUUmUc+2gqLtkh2mMH5xNM4=";
     };
     metal = fetchzip {
-      url = "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-arm64-1.22.0.tgz";
-      sha256 = "sha256-0000000000000000000000000000000000000000000000000000";
+      url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_static-v1.20.0-aarch64-apple-darwin.tgz";
+      sha256 = "sha256-cmiVcY7ds+WcodwbKnOnPsWDGoGE0+iSdEAy1erMUso=";
     };
   };
 
@@ -147,7 +147,7 @@ rec {
       export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -march=armv8.6-a";
       export NIX_CXXFLAGS_COMPILE="$NIX_CXXFLAGS_COMPILE -march=armv8.6-a";
       echo $NIX_CFLAGS_COMPILE
-      export ORT_LIB_LOCATION = "${onnxruntime.metal}/lib";
+      export ORT_LIB_LOCATION="${onnxruntime.metal}/lib";
     '';
   };
 
