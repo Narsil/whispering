@@ -412,7 +412,6 @@
                 libxkbcommon
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
-              LD_LIBRARY_PATH = "/run/opengl-driver/lib:${cudaPackages.cudnn}/lib";
             }
             // (getEnvVars pkgs system)
           );
