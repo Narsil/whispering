@@ -21,16 +21,17 @@
   libnotify,
   dbus,
   libiconv,
+  fetchzip,
 }:
 
 let
   # Fetch different versions of Onyx runtime libraries
   onnxruntime = {
-    gpu = builtins.fetchTarball {
-      url = "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0.tgz";
-      sha256 = "sha256:189hcwbr2irxy512lhj22ff9w3pwqhbvhja3xrk11vqk4rxq1sxh";
+    gpu = fetchzip {
+      url = "https://cdn.pyke.io/0/pyke:ort-rs/ms@1.22.0/x86_64-unknown-linux-gnu+cu12.tgz";
+      sha256 = "sha256-lLSLX38GRddcOvyEGSoAgUUmUc+2gqLtkh2mMH5xNM4=";
     };
-    metal = builtins.fetchTarball {
+    metal = fetchzip {
       url = "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-arm64-1.22.0.tgz";
       sha256 = "sha256-0000000000000000000000000000000000000000000000000000";
     };
