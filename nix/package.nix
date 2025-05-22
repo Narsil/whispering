@@ -7,7 +7,7 @@
   cmake,
   llvmPackages,
   openssl,
-  onnxruntime,
+  # onnxruntime,
   udev,
   libinput,
   alsa-lib,
@@ -24,6 +24,18 @@
 }:
 
 let
+  # Fetch different versions of Onyx runtime libraries
+  onnxruntime = {
+    gpu = builtins.fetchTarball {
+      url = "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-gpu-1.22.0.tgz";
+      sha256 = "sha256:189hcwbr2irxy512lhj22ff9w3pwqhbvhja3xrk11vqk4rxq1sxh";
+    };
+    metal = builtins.fetchTarball {
+      url = "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-arm64-1.22.0.tgz";
+      sha256 = "sha256-0000000000000000000000000000000000000000000000000000";
+    };
+  };
+
   filteredSrc = lib.cleanSourceWith {
     src = ../.;
     filter =
@@ -49,7 +61,6 @@ let
   # Common build inputs for all platforms
   commonBuildInputs = [
     openssl
-    onnxruntime
   ];
   commonNativeBuildInputs = [
     llvmPackages.libclang
@@ -61,7 +72,6 @@ let
   commonEnvVars = {
     LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
     BINDGEN_EXTRA_CLANG_ARGS = ''-I"${llvmPackages.libclang.lib}/lib/clang/${llvmPackages.libclang.version}/include"'';
-    ORT_LIB_LOCATION = "${onnxruntime}/lib";
   };
 
   # CUDA-specific configuration
@@ -70,6 +80,7 @@ let
       cudatoolkit
       cuda_cudart
       cuda_nvcc
+      onnxruntime.gpu
     ];
     envVars = {
       LD_LIBRARY_PATH = "${llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${cudaPackages.cudatoolkit}/lib";
@@ -77,6 +88,7 @@ let
       EXTRA_LDFLAGS = "-L${cudaPackages.cudatoolkit}/lib/stubs";
       CUDA_TOOLKIT_ROOT_DIR = "${cudaPackages.cudatoolkit}";
       CMAKE_CUDA_COMPILER = "${cudaPackages.cuda_nvcc}/bin/nvcc";
+      ORT_LIB_LOCATION = "${onnxruntime.gpu}/lib";
     };
     cmakeArgs = "-DCMAKE_CUDA_COMPILER=${cudaPackages.cuda_nvcc}/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=all -DCUDA_TOOLKIT_ROOT_DIR=${cudaPackages.cudatoolkit} -DCUDA_INCLUDE_DIRS=${cudaPackages.cudatoolkit}/include -DCUDA_CUDART_LIBRARY=${cudaPackages.cuda_cudart}/lib/libcudart.so -DCUDA_NVCC_EXECUTABLE=${cudaPackages.cuda_nvcc}/bin/nvcc";
   };
@@ -99,7 +111,7 @@ let
       cargoLock = {
         lockFile = ../Cargo.lock;
         outputHashes = {
-          "rdev-0.5.3" = "sha256-Ws+690+zVIp+niZ7zgbCMSKPXjioiWuvCw30faOyIrA=";
+          "rdev-0.6.0" = "sha256-T4yQXAzW52xBCZAjtKnarMKrXB6wybe/omjozcm1JjU=";
           "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
         };
       };
@@ -127,12 +139,14 @@ rec {
     extraBuildInputs = [
       libiconv
       openssl
+      onnxruntime.metal
     ];
     extraPreConfigure = ''
       echo $NIX_CFLAGS_COMPILE
       export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -march=armv8.6-a";
       export NIX_CXXFLAGS_COMPILE="$NIX_CXXFLAGS_COMPILE -march=armv8.6-a";
       echo $NIX_CFLAGS_COMPILE
+      export ORT_LIB_LOCATION = "${onnxruntime.metal}/lib";
     '';
   };
 

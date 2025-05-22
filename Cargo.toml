@@ -26,13 +26,13 @@ arboard = { version = "3.5.0" }
 wl-clipboard-rs = { version = "0.9.2", optional = true }
 ringbuf = "0.4.8"
 ndarray = "0.16.1"
-ort = {version = "2.0.0-rc.9", default-features = false, features=["ndarray", "half", "copy-dylibs"] }
+ort = {version = "2.0.0-rc.9", default-features = false, features=["ndarray", "half", "copy-dylibs", "download-binaries"] }
 
 
 [features]
 jack = ["cpal/jack"]
-cuda = ["whisper-rs/cuda"]
-metal = ["whisper-rs/metal"]
+cuda = ["whisper-rs/cuda", "ort/cuda"]
+metal = ["whisper-rs/metal", "ort/coreml"]
 wayland = ["rdev/wayland", "wl-clipboard-rs"]
 x11 = ["rdev/x11"]
 

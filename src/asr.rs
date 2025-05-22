@@ -80,6 +80,7 @@ impl Asr {
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
+        params.set_language(None);
 
         // Set initial prompt if available
         if let Some(prompt) = config.model.prompt.get_prompt_text() {

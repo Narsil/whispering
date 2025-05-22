@@ -53,7 +53,7 @@
           }
         else
           {
-            LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib";
+            LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn.lib}/lib";
           };
 
       # Build the package
@@ -409,10 +409,11 @@
               buildInputs = [
                 rustup
                 llvmPackages.libclang
-                onnxruntime
+                # onnxruntime
                 libxkbcommon
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
+              LD_LIBRARY_PATH = "/run/opengl-driver/lib:${cudaPackages.cudnn}/lib";
             }
             // (getEnvVars pkgs system)
           );

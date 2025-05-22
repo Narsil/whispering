@@ -8,6 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use cpal::SupportedStreamConfig;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hf_hub::api::tokio::ApiBuilder;
+// use hound::{WavSpec, WavWriter};
 use log::{debug, error, info, warn};
 use ringbuf::traits::Observer;
 use ringbuf::{
@@ -115,7 +116,6 @@ impl VADState {
             }
         }
 
-        // State machine logic (copied from update)
         match self.state {
             VADStateEnum::Silent => {
                 if speech_prob > self.threshold {
@@ -126,8 +126,15 @@ impl VADState {
                         self.audio_buffer.clear();
                         // Add pre-buffer to the start of audio_buffer
                         let mut temp = vec![0.0; self.pre_buffer.occupied_len()];
-                        let n = self.pre_buffer.pop_slice(&mut temp);
-                        let _ = self.audio_buffer.push_slice(&temp[..n]);
+                        let n = self.pre_buffer.occupied_len();
+                        let n2 = self.pre_buffer.pop_slice(&mut temp);
+                        assert_eq!(n, n2);
+                        let n3 = self.audio_buffer.push_slice(&temp[..n]);
+                        assert_eq!(n2, n3);
+                        info!(
+                            "Got {n} samples for pre buffer: this is {}s",
+                            n as f32 / 16_000.0
+                        );
                         return Some(VADEvent::StartSpeech);
                     } else {
                         self.state = VADStateEnum::SpeechDetected;
@@ -145,9 +152,16 @@ impl VADState {
                         self.state = VADStateEnum::Recording;
                         self.audio_buffer.clear();
                         // Add pre-buffer to the start of audio_buffer
-                        let mut temp = vec![0.0; self.pre_buffer.occupied_len()];
-                        let n = self.pre_buffer.pop_slice(&mut temp);
-                        let _ = self.audio_buffer.push_slice(&temp[..n]);
+                        let n = self.pre_buffer.occupied_len();
+                        let mut temp = vec![0.0; n];
+                        let n2 = self.pre_buffer.pop_slice(&mut temp);
+                        let n3 = self.audio_buffer.push_slice(&temp[..n]);
+                        assert_eq!(n, n2);
+                        assert_eq!(n2, n3);
+                        debug!(
+                            "Got {n} samples for pre buffer: this is {}s",
+                            n as f32 / 16_000.0
+                        );
                         return Some(VADEvent::StartSpeech);
                     }
                 } else {
@@ -209,6 +223,15 @@ pub struct AudioRecorder {
 pub const N_SAMPLES: usize = 512;
 
 impl AudioRecorder {
+    // fn create_wav_spec(config: &crate::config::AudioConfig) -> WavSpec {
+    //     WavSpec {
+    //         channels: config.channels,
+    //         sample_rate: config.sample_rate,
+    //         bits_per_sample: 32,
+    //         sample_format: hound::SampleFormat::Float,
+    //     }
+    // }
+
     /// Creates a new AudioRecorder instance.
     ///
     /// This function initializes the default audio input device, configures it
@@ -333,6 +356,11 @@ impl AudioRecorder {
             None
         };
 
+        // let recording_path = config.paths.recording_path.clone();
+        // let wav_spec = Self::create_wav_spec(&config.audio);
+
+        // let recording_path2 = recording_path.clone();
+
         let mut i = 0;
         let stream = Arc::new(Mutex::new(
             device
@@ -344,7 +372,6 @@ impl AudioRecorder {
                             let samples: Vec<f32> = data.to_vec();
 
                             // Resample the stereo audio to the desired sample rate
-                            // let resampled_stereo: Vec<f32> = audio_resample(&samples, sample_rate, 16000, channels);
                             let resampled_stereo: Vec<f32> = audio_resample(
                                 &samples,
                                 resampler.samplerate_in,
@@ -370,12 +397,15 @@ impl AudioRecorder {
                         } else {
                             data.to_vec()
                         };
+
+                        // Write to WAV file
                         let buf = &mut buffer;
                         for &sample in &data {
                             if buf.try_push(sample).is_err() {
                                 error!("Buffer full, dropping samples");
                             }
                         }
+
                         // Process chunks of N_SAMPLES samples while we have enough data
                         while buf.occupied_len() >= N_SAMPLES {
                             i += 1;
@@ -384,7 +414,7 @@ impl AudioRecorder {
                             assert_eq!(n, N_SAMPLES, "Expected to pop N_SAMPLES from buffer");
                             // Process the chunk
                             let speech_prob: f32 =
-                                if vad_state.state == VADStateEnum::Silent && i % 5 != 0 {
+                                if vad_state.state == VADStateEnum::Silent && i % 1 != 0 {
                                     0.4
                                 } else {
                                     silero.calc_level(&temp_chunk).expect("Prob")
@@ -397,6 +427,20 @@ impl AudioRecorder {
                                         info!("Speech detected");
                                     }
                                     VADEvent::EndSpeech(audio) => {
+                                        // TODO This is debugging audio range.
+                                        // if let Ok(mut writer) =
+                                        //     WavWriter::create(&recording_path2, wav_spec)
+                                        // {
+                                        //     for &sample in &audio {
+                                        //         writer.write_sample(sample).ok();
+                                        //     }
+                                        //     writer.finalize().ok();
+                                        // }
+                                        // info!(
+                                        //     "Wrote wav file at {} : {wav_spec:?}",
+                                        //     recording_path2.display()
+                                        // );
+
                                         tx_audio
                                             .send(Audio::Sample(audio))
                                             .expect("Send the example");
@@ -411,8 +455,6 @@ impl AudioRecorder {
                 )
                 .context("Failed to create audio stream")?,
         ));
-
-        // stream.pause().context("Cannot pause")?;
 
         let result = Self { stream };
 

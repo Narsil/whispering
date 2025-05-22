@@ -1,5 +1,13 @@
 use super::N_SAMPLES;
 use ndarray::{Array, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr};
+
+#[cfg(not(any(feature = "cuda", feature = "metal")))]
+use ort::execution_providers::CPUExecutionProvider;
+#[cfg(feature = "cuda")]
+use ort::execution_providers::CUDAExecutionProvider;
+#[cfg(feature = "metal")]
+use ort::execution_providers::CoreMLExecutionProvider;
+
 use ort::session::{Session, SessionInputs};
 use std::path::Path;
 
@@ -13,7 +21,17 @@ pub struct Silero {
 
 impl Silero {
     pub fn new(sample_rate: i64, model_path: impl AsRef<Path>) -> Result<Self, ort::Error> {
-        let session = Session::builder()?.commit_from_file(model_path)?;
+        #[cfg(feature = "cuda")]
+        let provider = CUDAExecutionProvider::default().build().error_on_failure();
+        #[cfg(feature = "metal")]
+        let provider = CoreMLExecutionProvider::default()
+            .build()
+            .error_on_failure();
+        #[cfg(not(any(feature = "cuda", feature = "metal")))]
+        let provider = CPUExecutionProvider::default().build().error_on_failure();
+        let session = Session::builder()?
+            .with_execution_providers([provider])?
+            .commit_from_file(model_path)?;
         let state = ArrayD::<f32>::zeros([2, 1, 128].as_slice());
         let sample_rate = Array::from_shape_vec([1], vec![sample_rate]).unwrap();
         let frame = Array2::<f32>::zeros([1, N_SAMPLES]);

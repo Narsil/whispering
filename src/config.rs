@@ -83,7 +83,7 @@ pub struct PathConfig {
 /// Type of activation for recording control
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
-#[serde(tag = "type", rename_all = "kebab-case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Trigger {
     /// Use keyboard shortcuts for activation
     /// Will send on release
@@ -91,12 +91,13 @@ pub enum Trigger {
     /// Use keyboard shortcuts to start VAD
     /// activated listening.
     /// Press again to stop listening
+    #[serde(rename_all = "snake_case")]
     ToggleVad {
         /// Threshold for voice activity detection (0.0 to 1.0)
         #[serde(default = "default_05")]
         threshold: f32,
         /// Minimum duration of silence to stop recording (in seconds)
-        #[serde(default = "default_05")]
+        #[serde(default = "default_2")]
         silence_duration: f32,
         /// Minimum duration of speech to start recording (in seconds)
         #[serde(default = "default_1")]
@@ -107,6 +108,9 @@ pub enum Trigger {
     },
 }
 
+fn default_2() -> f32 {
+    2.0
+}
 fn default_1() -> f32 {
     1.0
 }
@@ -158,7 +162,7 @@ pub struct Config {
 /// Type of prompt to use for the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
-#[serde(tag = "type", rename_all = "kebab-case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PromptType {
     /// Use a list of vocabulary words joined by commas
     Vocabulary { vocabulary: Vec<String> },
@@ -356,7 +360,7 @@ mod tests {
             recording_path = "/tmp/test/recorded.wav"
 
             [activation]
-            trigger.type = "push-to-talk"
+            trigger.type = "push_to_talk"
             notify = true
             autosend = true 
             keys = ["ControlLeft", "Space"] 
@@ -419,7 +423,7 @@ mod tests {
             recording_path = "~/.cache/whispering/recorded.wav"
 
             [activation]
-            trigger = { type = "toggle-vad", threshold = 0.7, silence_duration = 1.5, speech_duration = 0.4, pre_buffer_duration = 0.3 }
+            trigger = { type = "toggle_vad", threshold = 0.7, silence_duration = 1.5, speech_duration = 0.4, pre_buffer_duration = 0.3 }
             keys = ["ControlLeft", "Space"]
             notify = true
             autosend = true
@@ -498,7 +502,7 @@ mod tests {
             recording_path = "~/.cache/whispering/recorded.wav"
 
             [activation]
-            trigger.type = "push-to-talk"
+            trigger.type = "push_to_talk"
             notify = true
             autosend = true 
             keys = ["ControlLeft", "Space"] 
