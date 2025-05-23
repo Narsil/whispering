@@ -13,7 +13,7 @@ hf-hub = { version = "0.4.2", default-features = false, features = ["tokio", "de
 hound = "3.5.1"
 log = "0.4.27"
 notify-rust = "4.10.0"
-rdev = { git = "https://github.com/Narsil/rdev", rev = "92ec2f51c56547f79d414818a9b1e5416e63a10f" , default-features=false, features=["serialize", "wayland"]}
+rdev = { git = "https://github.com/Narsil/rdev", rev = "c77b4e5456301cfa7f2226020f2a58f2f8d77c5d" , default-features=false, features=["serialize", "wayland"]}
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
