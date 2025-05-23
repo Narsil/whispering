@@ -28,8 +28,8 @@ let
   # Fetch different versions of Onyx runtime libraries
   onnxruntime = {
     gpu = fetchzip {
-      url = "https://cdn.pyke.io/0/pyke:ort-rs/ms@1.22.0/x86_64-unknown-linux-gnu+cu12.tgz";
-      sha256 = "sha256-lLSLX38GRddcOvyEGSoAgUUmUc+2gqLtkh2mMH5xNM4=";
+      url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_dylib_cu12-v1.20.0-x86_64-unknown-linux-gnu.tgz";
+      sha256 = "sha256-7QzVQGpea9FSb7OEEYwfOF6qI6+rt+uCFytH23GKQMU=";
     };
     metal = fetchzip {
       url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_static-v1.20.0-aarch64-apple-darwin.tgz";
