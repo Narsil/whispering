@@ -162,14 +162,12 @@
                   description = "Sample rate in Hz.";
                 };
                 sample_format = lib.mkOption {
-                  type = lib.types.enum [ "f32" "i16" ];
+                  type = lib.types.enum [
+                    "f32"
+                    "i16"
+                  ];
                   default = "f32";
                   description = "Sample format (f32 or i16).";
-                };
-                device = lib.mkOption {
-                  type = lib.types.nullOr lib.types.str;
-                  default = null;
-                  description = "Audio input device name (e.g., 'sysdefault:CARD=C920'). If not specified, the default device will be used.";
                 };
               };
 
@@ -193,7 +191,10 @@
                   description = "Prompt configuration for the model.";
                   example = {
                     type = "vocabulary";
-                    vocabulary = [ "word1" "word2" ];
+                    vocabulary = [
+                      "word1"
+                      "word2"
+                    ];
                   };
                 };
                 replacements = lib.mkOption {
@@ -249,10 +250,20 @@
                 };
                 keys = lib.mkOption {
                   type = lib.types.listOf lib.types.str;
-                  default = [ "ControlLeft" "Space" ];
+                  default = [
+                    "ControlLeft"
+                    "Space"
+                  ];
                   description = "Keys that need to be pressed in sequence to start recording.";
                 };
               };
+            };
+
+            # Option to disable notifications completely
+            disableNotifications = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Disable notifications completely. Useful if you don't have a notification daemon running.";
             };
 
             # Additional environment variables
@@ -293,7 +304,7 @@
             # Create configuration file
             environment.etc."whispering/config.toml" = {
               source = tomlFormat.generate "whispering-config" {
-                audio = cfg.settings.audio // (if cfg.settings.audio.device == null then { device = ""; } else {});
+                audio = cfg.settings.audio // (if cfg.settings.audio.device == null then { device = ""; } else { });
                 model = {
                   repo = cfg.settings.model.repo;
                   filename = cfg.settings.model.filename;
@@ -344,8 +355,12 @@
                 "network.target"
                 "systemd-udev-settle.service"
                 "sound.target"
+                "dbus.service"
               ];
-              requires = [ "sound.target" ];
+              requires = [
+                "sound.target"
+                "dbus.service"
+              ];
               serviceConfig = {
                 Type = "simple";
                 User = cfg.user;
@@ -365,7 +380,13 @@
                   "video"
                 ];
                 # Display server specific environment variables
-                Environment = displayEnv ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);
+                Environment =
+                  displayEnv
+                  ++ [
+                    "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+                    "XDG_RUNTIME_DIR=/run/user/1000"
+                  ]
+                  ++ (lib.mapAttrsToList (name: value: "${name}=${value}") cfg.environment);
                 # Additional service configuration
               } // cfg.serviceConfig;
             };
