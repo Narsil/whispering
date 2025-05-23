@@ -405,12 +405,17 @@
         };
     in
     {
-      packages = forAllSystems (system: {
-        default = (buildPackage system).default;
-        whisper-darwin = (buildPackage system).whisper-darwin;
-        linux-wayland = (buildPackage system).linux-wayland;
-        linux-x11 = (buildPackage system).linux-x11;
-      });
+      packages = forAllSystems (system: 
+        let
+          pkg = buildPackage system;
+        in {
+          default = pkg.default;
+          whisper-darwin = pkg.whisper-darwin;
+          linux-wayland = pkg.linux-wayland;
+          linux-x11 = pkg.linux-x11;
+          onnxruntime-gpu = pkg.onnxruntime-gpu;
+        }
+      );
 
       devShells = forAllSystems (
         system:

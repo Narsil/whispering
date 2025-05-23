@@ -22,14 +22,35 @@
   dbus,
   libiconv,
   fetchzip,
+  autoPatchelfHook,
 }:
 
 let
   # Fetch different versions of Onyx runtime libraries
   onnxruntime = {
-    gpu = fetchzip {
-      url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_dylib_cu12-v1.20.0-x86_64-unknown-linux-gnu.tgz";
-      sha256 = "sha256-7QzVQGpea9FSb7OEEYwfOF6qI6+rt+uCFytH23GKQMU=";
+    gpu = stdenv.mkDerivation {
+      pname = "onnxruntime-gpu";
+      version = "1.20.0";
+      src = fetchzip {
+        url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_dylib_cu12-v1.20.0-x86_64-unknown-linux-gnu.tgz";
+        sha256 = "sha256-7QzVQGpea9FSb7OEEYwfOF6qI6+rt+uCFytH23GKQMU=";
+      };
+      nativeBuildInputs = [ autoPatchelfHook ];
+      buildInputs = with cudaPackages; [
+        cudatoolkit
+        cuda_cudart
+        libcufft
+        cudnn
+      ];
+      installPhase = ''
+        mkdir -p $out/lib
+        cp $src/lib/libonnxruntime.so $out/lib/
+        cp $src/lib/libonnxruntime_providers_cuda.so $out/lib/
+        cp $src/lib/libonnxruntime_providers_shared.so $out/lib/
+        # Ensure the provider libraries are in the same directory as libonnxruntime.so
+        ln -s $out/lib/libonnxruntime_providers_cuda.so $out/lib/libonnxruntime_providers_cuda.so.1
+        ln -s $out/lib/libonnxruntime_providers_shared.so $out/lib/libonnxruntime_providers_shared.so.1
+      '';
     };
     metal = fetchzip {
       url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_static-v1.20.0-aarch64-apple-darwin.tgz";
@@ -81,7 +102,7 @@ let
       cudatoolkit
       cuda_cudart
       cuda_nvcc
-      cuda_cufft
+      libcufft
       onnxruntime.gpu
     ];
     envVars = {
@@ -196,4 +217,6 @@ rec {
     extraEnvVars = cudaConfig.envVars;
     cmakeArgs = cudaConfig.cmakeArgs;
   };
+
+  onnxruntime-gpu = onnxruntime.gpu;
 }
