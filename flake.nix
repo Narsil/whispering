@@ -169,6 +169,11 @@
                   default = "f32";
                   description = "Sample format (f32 or i16).";
                 };
+                device = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  default = null;
+                  description = "Audio input device name (e.g., 'sysdefault:CARD=C920'). If not specified, the default device will be used.";
+                };
               };
 
               # Model settings
