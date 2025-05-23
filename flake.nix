@@ -293,7 +293,7 @@
             # Create configuration file
             environment.etc."whispering/config.toml" = {
               source = tomlFormat.generate "whispering-config" {
-                audio = cfg.settings.audio;
+                audio = cfg.settings.audio // (if cfg.settings.audio.device == null then { device = ""; } else {});
                 model = {
                   repo = cfg.settings.model.repo;
                   filename = cfg.settings.model.filename;
