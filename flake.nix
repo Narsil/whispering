@@ -34,6 +34,7 @@
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.cuda_nvcc
+            cudaPackages.libcufft
           ];
 
       # Function to get system-specific environment variables
@@ -49,12 +50,10 @@
             CFLAGS = "-fmodules";
             LIBRARY_PATH = "${pkgs.darwin.libiconv}/lib";
             ORT_LIB_LOCATION = "${onnxruntime.metal}/lib";
-            # NIX_CFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve -O2";
-            # NIX_CXXFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve -O2";
           }
         else
           {
-            LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn.lib}/lib";
+            # LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn.lib}/lib";
             ORT_LIB_LOCATION = "${onnxruntime.gpu}/lib";
           };
 
