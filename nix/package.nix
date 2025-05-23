@@ -81,6 +81,7 @@ let
       cudatoolkit
       cuda_cudart
       cuda_nvcc
+      cuda_cufft
       onnxruntime.gpu
     ];
     envVars = {
