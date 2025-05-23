@@ -38,7 +38,7 @@
 
       # Function to get system-specific environment variables
       getEnvVars =
-        pkgs: system:
+        pkgs: system: onnxruntime:
         if pkgs.stdenv.isDarwin then
           {
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -48,12 +48,14 @@
             MACOSX_DEPLOYMENT_TARGET = "11.0";
             CFLAGS = "-fmodules";
             LIBRARY_PATH = "${pkgs.darwin.libiconv}/lib";
+            ORT_LIB_LOCATION = "${onnxruntime.metal}/lib";
             # NIX_CFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve -O2";
             # NIX_CXXFLAGS_COMPILE = "-march=armv8.6-a+i8mm+dotprod+sve -O2";
           }
         else
           {
             LD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib:/run/opengl-driver/lib:${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn.lib}/lib";
+            ORT_LIB_LOCATION = "${onnxruntime.gpu}/lib";
           };
 
       # Build the package
@@ -309,10 +311,11 @@
             # Create configuration file
             environment.etc."whispering/config.toml" = {
               source = tomlFormat.generate "whispering-config" {
-                audio = if cfg.settings.audio.device == null then
-                  builtins.removeAttrs cfg.settings.audio [ "device" ]
-                else
-                  cfg.settings.audio;
+                audio =
+                  if cfg.settings.audio.device == null then
+                    builtins.removeAttrs cfg.settings.audio [ "device" ]
+                  else
+                    cfg.settings.audio;
                 model = {
                   repo = cfg.settings.model.repo;
                   filename = cfg.settings.model.filename;
@@ -418,6 +421,17 @@
             config.allowUnfree = !pkgs.stdenv.isDarwin;
             config.cudaSupport = !pkgs.stdenv.isDarwin;
           };
+          # Fetch different versions of Onyx runtime libraries
+          onnxruntime = {
+            gpu = pkgs.fetchzip {
+              url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_dylib_cu12-v1.20.0-x86_64-unknown-linux-gnu.tgz";
+              sha256 = "sha256-7QzVQGpea9FSb7OEEYwfOF6qI6+rt+uCFytH23GKQMU=";
+            };
+            metal = pkgs.fetchzip {
+              url = "https://parcel.pyke.io/v2/delivery/ortrs/packages/msort-binary/1.20.0/ortrs_static-v1.20.0-aarch64-apple-darwin.tgz";
+              sha256 = "sha256-cmiVcY7ds+WcodwbKnOnPsWDGoGE0+iSdEAy1erMUso=";
+            };
+          };
         in
         with pkgs;
         {
@@ -434,7 +448,7 @@
               ] ++ getBuildInputs pkgs system;
               RUST_LOG = "whispering=info";
             }
-            // (getEnvVars pkgs system)
+            // (getEnvVars pkgs system onnxruntime)
           );
         }
       );
