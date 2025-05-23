@@ -162,12 +162,14 @@
                   description = "Sample rate in Hz.";
                 };
                 sample_format = lib.mkOption {
-                  type = lib.types.enum [
-                    "f32"
-                    "i16"
-                  ];
-                  default = "float";
-                  description = "Sample format (float or int).";
+                  type = lib.types.enum [ "f32" "i16" ];
+                  default = "f32";
+                  description = "Sample format (f32 or i16).";
+                };
+                device = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  default = null;
+                  description = "Audio input device name (e.g., 'sysdefault:CARD=C920'). If not specified, the default device will be used.";
                 };
               };
 
@@ -191,10 +193,7 @@
                   description = "Prompt configuration for the model.";
                   example = {
                     type = "vocabulary";
-                    vocabulary = [
-                      "word1"
-                      "word2"
-                    ];
+                    vocabulary = [ "word1" "word2" ];
                   };
                 };
                 replacements = lib.mkOption {
@@ -212,53 +211,46 @@
               paths = {
                 cache_dir = lib.mkOption {
                   type = lib.types.path;
-                  default = "${cfg.dataDir}/cache";
+                  default = "${cfg.dataDir}/.cache/whispering";
                   description = "Cache directory for storing temporary files.";
                 };
                 recording_path = lib.mkOption {
                   type = lib.types.path;
-                  default = "${cfg.dataDir}/cache/recorded.wav";
+                  default = "${cfg.dataDir}/.cache/whispering/recorded.wav";
                   description = "Path to the recorded audio file.";
                 };
               };
 
-              # Shortcut settings
-              shortcuts = {
-                keys = lib.mkOption {
-                  type = lib.types.listOf lib.types.str;
-                  default = [
-                    "ControlLeft"
-                    "Space"
-                  ];
-                  description = "Keys that need to be pressed in sequence to start recording.";
+              # Activation settings
+              activation = {
+                trigger = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.anything;
+                  default = {
+                    type = "push_to_talk";
+                  };
+                  description = "Type of activation to use for recording control.";
+                  example = {
+                    type = "toggle_vad";
+                    threshold = 0.5;
+                    silence_duration = 1.0;
+                    speech_duration = 0.3;
+                    pre_buffer_duration = 1.0;
+                  };
+                };
+                notify = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
+                  description = "Displays a notification about the capturing.";
                 };
                 autosend = lib.mkOption {
                   type = lib.types.bool;
                   default = false;
                   description = "Automatically hit enter after sending the text.";
                 };
-                notify = lib.mkOption {
-                  type = lib.types.bool;
-                  default = true;
-                  description = "Automatically hit enter after sending the text.";
-                };
-              };
-
-              # Vocabulary settings
-              vocabulary = lib.mkOption {
-                type = lib.types.listOf lib.types.str;
-                default = [ ];
-                description = "List of words to improve recognition accuracy.";
-              };
-
-              # Replacement settings
-              replacements = lib.mkOption {
-                type = lib.types.attrsOf lib.types.str;
-                default = { };
-                description = "Map of text to replace with their replacements.";
-                example = {
-                  "text to replace" = "replacement text";
-                  "another text" = "another replacement";
+                keys = lib.mkOption {
+                  type = lib.types.listOf lib.types.str;
+                  default = [ "ControlLeft" "Space" ];
+                  description = "Keys that need to be pressed in sequence to start recording.";
                 };
               };
             };
@@ -309,7 +301,7 @@
                   replacements = cfg.settings.model.replacements;
                 };
                 paths = cfg.settings.paths;
-                shortcuts = cfg.settings.shortcuts;
+                activation = cfg.settings.activation;
               };
               mode = "0644";
             };
