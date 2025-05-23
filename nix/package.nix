@@ -112,7 +112,7 @@ let
       cargoLock = {
         lockFile = ../Cargo.lock;
         outputHashes = {
-          "rdev-0.6.0" = "sha256-T4yQXAzW52xBCZAjtKnarMKrXB6wybe/omjozcm1JjU=";
+          "rdev-0.6.0" = "sha256-8YKpRw0gZgwNSFWHS/yR/Toz5qeTkq0lUxJ0QiD/JeQ=";
           "whisper-rs-0.14.2" = "sha256-V+1RYWTVLHgPhRg11pz08jb3zqFtzv3ODJ1E+tf/Z9I=";
         };
       };
