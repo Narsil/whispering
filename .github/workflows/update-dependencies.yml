@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # Run every Sunday at midnight
   workflow_dispatch:  # Allow manual triggering
+  push:
 
 permissions:
   contents: write
@@ -13,7 +14,8 @@ jobs:
   update-dependencies:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
     outputs:

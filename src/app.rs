@@ -41,6 +41,51 @@ pub struct App {
     // rx_audio: UnboundedReceiver<PathBuf>,
 }
 
+async fn handle_audio(asr: &mut Asr, config: &Config, audio: Audio) -> Result<()> {
+    let samples: Option<Vec<f32>> = match audio {
+        Audio::Warm => {
+            asr.load().expect("Load");
+            None
+        }
+        Audio::Sample(samples) => Some(samples),
+        Audio::Path(wav_path) => {
+            info!("Transcribing audio...");
+            let samples = asr.samples_from_file(&wav_path).expect("Read wav");
+            Some(samples)
+        }
+    };
+    if let Some(samples) = samples {
+        info!("Transcribing audio...");
+        let output = asr.run(samples, &config).context("Error running ASR")?;
+        if output.is_empty() {
+            // Show notification with transcribed text
+            config.notify("No voice detected", &output);
+            return Ok(());
+        }
+
+        // let output = "Toto".to_string();
+        info!("Transcribed: {output}");
+        let summary = if output.len() > 20 {
+            &format!("{}..", &output[..20])
+        } else {
+            &output
+        };
+        // Show notification with transcribed text
+        config.notify(summary, &output);
+
+        paste(output).context("Pasting").expect("Pasting");
+        // Always end by pressing Return to submit
+        if config.activation.autosend {
+            std::thread::sleep(Duration::from_millis(2));
+            simulate(&EventType::KeyPress(Key::Return)).expect("simulate");
+            std::thread::sleep(Duration::from_millis(2));
+            simulate(&EventType::KeyRelease(Key::Return)).expect("simulate");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    Ok(())
+}
+
 impl App {
     /// Creates a new App instance.
     ///
@@ -75,50 +120,14 @@ impl App {
             .await
             .context("Failed to download model")?;
 
-        let mut asr = Asr::new(&model_path)?;
+        let asr = Asr::new(&model_path)?;
         let asr_config = config.clone();
         tokio::task::spawn(async move {
+            let mut asr = asr;
+            let asr_config = asr_config;
             while let Some(audio) = rx_audio.recv().await {
-                let samples: Option<Vec<f32>> = match audio {
-                    Audio::Warm => {
-                        asr.load().expect("Load");
-                        None
-                    }
-                    Audio::Sample(samples) => Some(samples),
-                    Audio::Path(wav_path) => {
-                        info!("Transcribing audio...");
-                        let samples = asr.samples_from_file(&wav_path).expect("Read wav");
-                        Some(samples)
-                    }
-                };
-                if let Some(samples) = samples {
-                    info!("Transcribing audio...");
-                    let output = asr.run(samples, &asr_config).expect("Error running ASR");
-                    if output.is_empty() {
-                        // Show notification with transcribed text
-                        asr_config.notify("No voice detected", &output);
-                        continue;
-                    }
-
-                    // let output = "Toto".to_string();
-                    info!("Transcribed: {output}");
-                    let summary = if output.len() > 20 {
-                        &format!("{}..", &output[..20])
-                    } else {
-                        &output
-                    };
-                    // Show notification with transcribed text
-                    asr_config.notify(summary, &output);
-
-                    paste(output).context("Pasting").expect("Pasting");
-                    // Always end by pressing Return to submit
-                    if config.activation.autosend {
-                        std::thread::sleep(Duration::from_millis(2));
-                        simulate(&EventType::KeyPress(Key::Return)).expect("simulate");
-                        std::thread::sleep(Duration::from_millis(2));
-                        simulate(&EventType::KeyRelease(Key::Return)).expect("simulate");
-                        std::thread::sleep(Duration::from_millis(2));
-                    }
+                if let Err(err) = handle_audio(&mut asr, &asr_config, audio).await {
+                    error!("Error handling audio {err:?}");
                 }
             }
         });

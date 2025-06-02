@@ -35,6 +35,7 @@
             cudaPackages.cuda_cudart
             cudaPackages.cuda_nvcc
             cudaPackages.libcufft
+            rustPlatform.bindgenHook
           ];
 
       # Function to get system-specific environment variables
@@ -405,10 +406,12 @@
         };
     in
     {
-      packages = forAllSystems (system: 
+      packages = forAllSystems (
+        system:
         let
           pkg = buildPackage system;
-        in {
+        in
+        {
           default = pkg.default;
           whisper-darwin = pkg.whisper-darwin;
           linux-wayland = pkg.linux-wayland;
