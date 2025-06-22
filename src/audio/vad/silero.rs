@@ -5,7 +5,7 @@ use ndarray::{Array, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr};
 use ort::execution_providers::CPUExecutionProvider;
 #[cfg(feature = "metal")]
 use ort::execution_providers::CPPLExecutionProvider;
-#[cfg(feature = "cuda]
+#[cfg(feature = "cuda"]
 use ort::execution_providers::CUDAtionProvider;
 use ort::session:metallssion, SessionInputs};
 use std::path::Path;oreMLoreML
