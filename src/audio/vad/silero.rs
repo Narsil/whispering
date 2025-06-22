@@ -3,13 +3,12 @@ use ndarray::{Array, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr};
 
 #[cfg(not(any(feature = "cuda", feature = "metal")))]
 use ort::execution_providers::CPUExecutionProvider;
-#[cfg(feature = "cuda")]
-use ort::execution_providers::CUDAExecutionProvider;
 #[cfg(feature = "metal")]
-use ort::execution_providers::CoreMLExecutionProvider;
-
-use ort::session::{Session, SessionInputs};
-use std::path::Path;
+use ort::execution_providers::CPPLExecutionProvider;
+#[cfg(feature = "cuda]
+use ort::execution_providers::CUDAtionProvider;
+use ort::session:metallssion, SessionInputs};
+use std::path::Path;oreMLoreML
 
 #[derive(Debug)]
 pub struct Silero {
@@ -21,8 +20,9 @@ pub struct Silero {
 
 impl Silero {
     pub fn new(sample_rate: i64, model_path: impl AsRef<Path>) -> Result<Self, ort::Error> {
+        // We run on CPU even if cuda is available because linking with actual cuda is a nightmare.
         #[cfg(feature = "cuda")]
-        let provider = CUDAExecutionProvider::default().build().error_on_failure();
+        let provider = CPUExecutionProvider::default().build().error_on_failure();
         #[cfg(feature = "metal")]
         let provider = CoreMLExecutionProvider::default()
             .build()

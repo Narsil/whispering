@@ -3,7 +3,7 @@ use log::{LevelFilter, info};
 use whisper_rs::install_logging_hooks;
 
 pub fn init_logging() {
-    // install_logging_hooks();
+    install_logging_hooks();
 
     #[cfg(debug_assertions)]
     let default_level = LevelFilter::Debug;
