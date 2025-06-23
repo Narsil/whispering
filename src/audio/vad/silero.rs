@@ -3,12 +3,12 @@ use ndarray::{Array, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr};
 
 #[cfg(not(any(feature = "cuda", feature = "metal")))]
 use ort::execution_providers::CPUExecutionProvider;
-#[cfg(feature = "metal")]
-use ort::execution_providers::CPPLExecutionProvider;
 #[cfg(feature = "cuda")]
-use ort::execution_providers::CUDAtionProvider;
-use ort::session:metallssion, SessionInputs};
-use std::path::Path;oreMLoreML
+use ort::execution_providers::CPUExecutionProvider;
+#[cfg(feature = "metal")]
+use ort::execution_providers::CoreMLExecutionProvider;
+use ort::session::{Session, SessionInputs};
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct Silero {
