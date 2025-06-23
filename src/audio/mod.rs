@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use log::info;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::config::{Config, Trigger};
@@ -14,6 +15,7 @@ pub enum AudioRecorder {
     Vad(vad::AudioRecorder),
 }
 
+#[derive(Debug)]
 pub enum Audio {
     Warm,
     Path(PathBuf),
@@ -22,10 +24,11 @@ pub enum Audio {
 
 impl AudioRecorder {
     pub async fn new(config: &Config, tx_audio: UnboundedSender<Audio>) -> Result<Self> {
+        info!("Using trigger {:?}", config.activation.trigger);
         match config.activation.trigger {
-            Trigger::PushToTalk => Ok(Self::Push(push_to_talk::AudioRecorder::new(
-                config, tx_audio,
-            )?)),
+            Trigger::PushToTalk | Trigger::Toggle => Ok(Self::Push(
+                push_to_talk::AudioRecorder::new(config, tx_audio)?,
+            )),
             Trigger::ToggleVad {
                 threshold,
                 silence_duration,

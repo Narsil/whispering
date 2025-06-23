@@ -36,11 +36,13 @@ recording_path = "~/.cache/whispering/recorded.wav"
 [activation]
 # Type of activation to use for recording control
 # Options:
-# 1. Shortcut-based activation:
+# 1. Push to talk (hold keys):
 #    trigger.type = "push_to_talk"
-# 2. Voice Activity Detection (VAD):
+# 2. Toggle (press to start, press again to stop):  
+#    trigger.type = "toggle"
+# 3. Voice Activity Detection (VAD):
 #    trigger = { type = "toggle_vad", threshold = 0.5, silence_duration = 1.0, speech_duration = 0.3 }
-trigger.type = "push_to_talk"
+trigger.type = "toggle"
 keys = ["ControlLeft", "Space"]
 autosend = false
 # Displays a notification about the capturing

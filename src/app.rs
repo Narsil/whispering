@@ -50,7 +50,7 @@ async fn handle_audio(asr: &mut Asr, config: &Config, audio: Audio) -> Result<()
         Audio::Sample(samples) => Some(samples),
         Audio::Path(wav_path) => {
             info!("Transcribing audio...");
-            let samples = asr.samples_from_file(&wav_path).expect("Read wav");
+            let samples = asr.samples_from_file(&wav_path).context("Read wav")?;
             Some(samples)
         }
     };
@@ -161,10 +161,12 @@ impl App {
         });
 
         let keys = &self.config.activation.keys;
-        info!(
-            "Press {:?} to start recording, release the last key to stop",
-            keys
-        );
+        let message = match &self.config.activation.trigger {
+            Trigger::PushToTalk => format!("Press {:?} to start recording, release to stop", keys),
+            Trigger::Toggle => format!("Press {:?} to start recording, press again to stop", keys),
+            Trigger::ToggleVad { .. } => format!("Press {:?} to toggle VAD recording", keys),
+        };
+        info!("{}", message);
 
         while let Some(event) = rchan.recv().await {
             if let Err(err) = self.handle_event(event) {
@@ -198,6 +200,7 @@ impl App {
     fn handle_event(&mut self, event: rdev::Event) -> Result<()> {
         match &self.config.activation.trigger {
             Trigger::PushToTalk => self.handle_event_push_to_talk(event),
+            Trigger::Toggle => self.handle_event_push_to_toggle(event),
             Trigger::ToggleVad { .. } => self.handle_event_vad(event),
         }
     }
@@ -225,6 +228,40 @@ impl App {
                 }
             }
             EventType::KeyRelease(key) => {
+                self.state.pressed_keys.retain(|&k| k != key);
+            }
+            _ => (),
+        }
+        Ok(())
+    }
+    fn handle_event_push_to_toggle(&mut self, event: rdev::Event) -> Result<()> {
+        match event.event_type {
+            EventType::KeyPress(key) => {
+                let keys = &self.config.activation.keys;
+                if keys.contains(&key) {
+                    self.state.pressed_keys.insert(key);
+                }
+
+                // Check if all required keys are pressed
+                let all_keys_pressed = keys == &self.state.pressed_keys;
+
+                if all_keys_pressed {
+                    // Toggle recording state
+                    self.state.recording = !self.state.recording;
+
+                    if self.state.recording {
+                        info!("Starting recording...");
+                        self.notify("Recording started", "Press again to stop");
+                        self.recorder.start_recording()?;
+                    } else {
+                        info!("Stopping recording...");
+                        self.notify("Recording stopped", "Processing audio...");
+                        self.recorder.stop_recording()?;
+                    }
+                }
+            }
+            EventType::KeyRelease(key) => {
+                // Remove the key from pressed_keys when released
                 self.state.pressed_keys.retain(|&k| k != key);
             }
             _ => (),

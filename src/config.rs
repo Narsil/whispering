@@ -88,6 +88,8 @@ pub enum Trigger {
     /// Use keyboard shortcuts for activation
     /// Will send on release
     PushToTalk,
+    /// Press shortcut to start recording, press again to stop
+    Toggle,
     /// Use keyboard shortcuts to start VAD
     /// activated listening.
     /// Press again to stop listening
