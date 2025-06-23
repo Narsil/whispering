@@ -237,14 +237,29 @@
                   default = {
                     type = "push_to_talk";
                   };
-                  description = "Type of activation to use for recording control.";
-                  example = {
-                    type = "toggle_vad";
-                    threshold = 0.5;
-                    silence_duration = 1.0;
-                    speech_duration = 0.3;
-                    pre_buffer_duration = 1.0;
-                  };
+                  description = ''
+                    Type of activation to use for recording control.
+                    Options:
+                    - "push_to_talk": Hold keys to record, release to transcribe
+                    - "toggle": Press keys to start recording, press again to stop and transcribe
+                    - "toggle_vad": Use Voice Activity Detection with toggle activation
+                  '';
+                  example = lib.literalExpression ''
+                    # Push to talk (default)
+                    { type = "push_to_talk"; }
+                    
+                    # Toggle mode - press to start, press again to stop
+                    { type = "toggle"; }
+                    
+                    # Voice Activity Detection with toggle
+                    { 
+                      type = "toggle_vad";
+                      threshold = 0.5;
+                      silence_duration = 1.0;
+                      speech_duration = 0.3;
+                      pre_buffer_duration = 1.0;
+                    }
+                  '';
                 };
                 notify = lib.mkOption {
                   type = lib.types.bool;
