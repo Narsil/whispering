@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 clap = { version = "4.5", features = ["derive"] }
-cpal = "0.15.3"
+cpal = "0.16.0"
 dirs = "6.0.0"
 env_logger = "0.11.8"
 hf-hub = { version = "0.4.2", default-features = false, features = ["tokio", "default-tls"] }
@@ -17,7 +17,7 @@ rdev = { git = "https://github.com/Narsil/rdev", rev = "c14f2dc5c8100a96c5d7e301
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
-toml = "0.8"
+toml = "0.9"
 tokio = { version = "1.44.2", features = ["full"] }
 whisper-rs = { git = "https://github.com/Narsil/whisper-rs.git", rev = "171471d2b3615f54a1f6c87d70ee88f54b1126a9" }
 samplerate = "0.2.4"
